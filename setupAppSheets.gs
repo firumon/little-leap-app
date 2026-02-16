@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * Little Leap — APP Database Sheet Setup Script
+ * Little Leap AQL — APP Database Sheet Setup Script
  * ============================================================
  * 
  * Run this script from Extensions → Apps Script in the APP 
