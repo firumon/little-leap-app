@@ -1,9 +1,41 @@
+import { isStandalone } from 'src/utils/pwa-utils'
+
 const routes = [
   {
     path: '/',
-    component: () => import('layouts/MainLayout.vue'),
+    component: () => import('layouts/AuthLayout/AuthLayout.vue'),
     children: [
-      { path: '', component: () => import('pages/IndexPage.vue') }
+      {
+        path: '',
+        name: 'home',
+        beforeEnter: (to, from, next) => {
+          if (process.env.DEV) {
+            next({ name: 'login' });
+          } else if (isStandalone()) {
+            next({ name: 'login' });
+          } else {
+            next({ name: 'landing' });
+          }
+        }
+      },
+      {
+        path: 'landing',
+        name: 'landing',
+        component: () => import('pages/AuthPage/LandingPage.vue')
+      },
+      {
+        path: 'login',
+        name: 'login',
+        component: () => import('pages/AuthPage/LoginPage.vue')
+      }
+    ]
+  },
+
+  {
+    path: '/dashboard',
+    component: () => import('layouts/MainLayout/MainLayout.vue'),
+    children: [
+      { path: '', component: () => import('pages/DashboardPage/DashboardPage.vue') }
     ]
   },
 
@@ -11,7 +43,7 @@ const routes = [
   // but you can also remove it
   {
     path: '/:catchAll(.*)*',
-    component: () => import('pages/ErrorNotFound.vue')
+    component: () => import('pages/ErrorNotFound/ErrorNotFound.vue')
   }
 ]
 

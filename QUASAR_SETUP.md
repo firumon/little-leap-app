@@ -52,12 +52,25 @@ The frontend code is located in the `FRONTENT` directory:
 - `src-pwa/`: Contains PWA-specific configurations (the app is configured with PWA support).
 - `quasar.config.js`: The main configuration file for the Quasar app.
 
-## Development Workflow
-- **Development Server:** Run `npm run dev` inside the `FRONTENT` directory to start the Quasar development server (default port: 9000).
-- **Build for Production:** Run `quasar build` to generate the production-ready distribution.
+## Layout & Navigation
+Recently, a professional ERP-style layout was implemented in `MainLayout.vue`.
 
-## Key Files for AI Agents
-- `FRONTENT/package.json`: Project dependencies and scripts.
-- `FRONTENT/quasar.config.js`: Quasar-specific settings.
-- `FRONTENT/src/css/quasar.variables.scss`: UI branding colors.
-- `FRONTENT/src/boot/axios.js`: API communication setup.
+### Header Features
+- **Application Title:** "Little Leap AQL" with a business icon.
+- **Search Bar:** A dark-themed search input for quick resource access.
+- **Notifications:** A notification bell with a red badge for alerts.
+- **Profile Menu:** A dropdown containing Profile, Settings, and Logout options.
+
+### Navigation (Sidebar)
+The sidebar navigation is grouped into logical business areas:
+- **Dashboard:** Main overview and metrics.
+- **Masters:** Core data management (Products, Warehouses, Outlets, Salesmen).
+- **Logistics:** Supply chain activities (Shipment Booking, Port Clearance).
+- **Inventory:** Warehouse management (Stock Reports, Transfers, Receipts).
+- **Sales & Orders:** Commercial activities (Invoices, Refills, Purchase Orders).
+- **Reports:** Summarized data and PDF exports.
+
+## Development Workflow
+- **Development Server:** Run `npm run dev` inside the `FRONTENT` directory (port 9000).
+- **Routing:** All menu items are linked to specific routes (e.g., `/masters/products`). Ensure corresponding pages are created in `src/pages/`.
+- **Styling:** Custom SCSS in `MainLayout.vue` ensures a modern "pill" shape for active navigation items.

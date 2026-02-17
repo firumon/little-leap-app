@@ -1,4 +1,9 @@
 {
+  "name": "Little Leap AQL",
+  "short_name": "Little Leap",
+  "description": "Premium AQL Management System",
+  "display": "standalone",
+  "start_url": "/",
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#027be3",
