@@ -14,8 +14,11 @@ The APP sheet manages user authentication, role-based access control (RBAC), and
 - **UserID (PK):** Unique identifier (Format: `U####`, e.g., `U0001`). Generated via auto-ID formula.
 - **Name:** Full name of the user.
 - **Email:** User's email address (used for login).
-- **PasswordHash:** SHA-256 hashed password.
+- **PasswordHash:** SHA-256 (Base64) hashed password.
+- **RoleID (FK):** Reference to `Roles.RoleID`. (Many-to-One). Replaces the old `UserRoles` sheet.
 - **Status:** User status (`Active` or `Inactive`). Managed via data validation.
+- **Avatar:** URL or reference to the user's profile picture.
+- **ApiKey:** Unique API key for programmatic access.
 
 ### 2. Roles
 **Purpose:** Defines the roles available in the system (e.g., Administrator, Sales).
@@ -23,12 +26,7 @@ The APP sheet manages user authentication, role-based access control (RBAC), and
 - **Name:** Descriptive name of the role.
 - **Description:** Details about the role's responsibilities.
 
-### 3. UserRoles
-**Purpose:** Junction table mapping users to one or more roles (Many-to-Many).
-- **UserID (FK):** Reference to `Users.UserID`.
-- **RoleID (FK):** Reference to `Roles.RoleID`.
-
-### 4. RolePermissions
+### 3. RolePermissions
 **Purpose:** Granular permissions for each role on specific resources.
 - **RoleID (FK):** Reference to `Roles.RoleID`.
 - **Resource:** The name of the resource (as defined in the `Resources` sheet).
@@ -37,7 +35,7 @@ The APP sheet manages user authentication, role-based access control (RBAC), and
 - **CanUpdate:** Boolean (Checkbox).
 - **CanDelete:** Boolean (Checkbox).
 
-### 5. Resources
+### 4. Resources
 **Purpose:** Registry of all entities/sheets managed by the system.
 - **Name:** Unique resource identifier (e.g., `Products`, `Invoices`).
 - **FileID:** The Google Sheet ID where the resource resides.
@@ -52,8 +50,7 @@ The APP sheet manages user authentication, role-based access control (RBAC), and
 
 ```mermaid
 erDiagram
-    Users ||--o{ UserRoles : "has"
-    Roles ||--o{ UserRoles : "assigned to"
+    Users }o--|| Roles : "belongs to"
     Roles ||--o{ RolePermissions : "defines"
     RolePermissions }o--|| Resources : "governs access to"
 
@@ -62,18 +59,16 @@ erDiagram
         string Name
         string Email
         string PasswordHash
+        string RoleID FK
         string Status
+        string Avatar
+        string ApiKey
     }
 
     Roles {
         string RoleID PK
         string Name
         string Description
-    }
-
-    UserRoles {
-        string UserID FK
-        string RoleID FK
     }
 
     RolePermissions {

@@ -41,11 +41,16 @@
           
           <q-btn round flat>
             <q-avatar size="32px">
-              <img src="https://cdn.quasar.dev/img/avatar.png">
+              <img :src="userAvatar">
             </q-avatar>
             <q-menu>
               <q-list style="min-width: 150px">
-                <q-item clickable v-close-popup>
+                <q-item-section class="q-pa-md text-grey-8 bg-grey-2">
+                  <div class="text-weight-bold">{{ auth.userProfile?.name }}</div>
+                  <div class="text-caption">{{ auth.userRole }}</div>
+                </q-item-section>
+                <q-separator />
+                <q-item clickable v-close-popup to="/profile">
                   <q-item-section avatar>
                     <q-icon name="person" />
                   </q-item-section>
@@ -58,7 +63,7 @@
                   <q-item-section>Settings</q-item-section>
                 </q-item>
                 <q-separator />
-                <q-item clickable v-close-popup class="text-negative">
+                <q-item clickable v-close-popup class="text-negative" @click="handleLogout">
                   <q-item-section avatar>
                     <q-icon name="logout" />
                   </q-item-section>
@@ -204,13 +209,21 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useAuthStore } from 'src/stores/auth'
 
+const auth = useAuthStore()
 const leftDrawerOpen = ref(false)
 const search = ref('')
 
+const userAvatar = computed(() => auth.userProfile?.avatar || 'https://cdn.quasar.dev/img/avatar.png')
+
 function toggleLeftDrawer () {
   leftDrawerOpen.value = !leftDrawerOpen.value
+}
+
+function handleLogout() {
+  auth.logout()
 }
 </script>
 

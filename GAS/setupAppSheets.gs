@@ -2,21 +2,10 @@
  * ============================================================
  * Little Leap AQL — APP Database Sheet Setup Script
  * ============================================================
- * 
- * Run this script from Extensions → Apps Script in the APP 
- * Google Sheet to create the required sheets:
- *   - Users      (auto-ID: U0001, U0002, ...)
- *   - Roles      (auto-ID: R0001, R0002, ...)
- *   - UserRoles  (no ID column — junction table)
- *   - RolePermissions (no ID column — junction table)
- * 
- * Each sheet is created as a named Table (matching the sheet 
- * name) with header + 1 data row. New rows are added as needed.
- * 
- * The script is IDEMPOTENT — running it multiple times is safe.
- * Existing sheets with matching names are skipped.
- * ============================================================
  */
+
+// Shared constants are located in Constants.gs
+
 
 /**
  * Main entry point — run this function.
@@ -27,8 +16,8 @@ function setupAppSheets() {
   // ── Sheet Definitions ──────────────────────────────────────
   const sheetConfigs = [
     {
-      name: 'Users',
-      headers: ['UserID', 'Name', 'Email', 'PasswordHash', 'Status'],
+      name: CONFIG.SHEETS.USERS,
+      headers: ['UserID', 'Name', 'Email', 'PasswordHash', 'RoleID', 'Status', 'Avatar', 'ApiKey'],
       // Auto-ID formula for column 1: generates U0001, U0002, ...
       autoIdFormula: '="U"&TEXT(ROW()-1,"0000")',
       validations: [
@@ -45,11 +34,14 @@ function setupAppSheets() {
         'Name': 180,
         'Email': 220,
         'PasswordHash': 260,
-        'Status': 100
+        'RoleID': 100,
+        'Status': 100,
+        'Avatar': 200,
+        'ApiKey': 220
       }
     },
     {
-      name: 'Roles',
+      name: CONFIG.SHEETS.ROLES,
       headers: ['RoleID', 'Name', 'Description'],
       // Auto-ID formula for column 1: generates R0001, R0002, ...
       autoIdFormula: '="R"&TEXT(ROW()-1,"0000")',
@@ -61,17 +53,7 @@ function setupAppSheets() {
       }
     },
     {
-      name: 'UserRoles',
-      headers: ['UserID', 'RoleID'],
-      autoIdFormula: null,  // No ID column — junction table
-      validations: [],
-      columnWidths: {
-        'UserID': 120,
-        'RoleID': 120
-      }
-    },
-    {
-      name: 'RolePermissions',
+      name: CONFIG.SHEETS.ROLE_PERMISSIONS,
       headers: ['RoleID', 'Resource', 'CanRead', 'CanWrite', 'CanUpdate', 'CanDelete'],
       autoIdFormula: null,  // No ID column — junction table
       validations: [
@@ -133,7 +115,7 @@ function setupAppSheets() {
     // 2. Format headers — bold, background color, white text, center-aligned
     headerRange
       .setFontWeight('bold')
-      .setBackground('#4a86c8')
+      .setBackground(CONFIG.BRAND_COLOR)
       .setFontColor('#ffffff')
       .setHorizontalAlignment('center')
       .setVerticalAlignment('middle')
@@ -183,7 +165,7 @@ function setupAppSheets() {
     // 10. Create named table (banded range) — header + 1 data row
     var tableRange = sheet.getRange(1, 1, 2, config.headers.length);
     var banding = tableRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY);
-    banding.setHeaderRowColor('#4a86c8')
+    banding.setHeaderRowColor(CONFIG.BRAND_COLOR)
            .setFirstRowColor('#ffffff')
            .setSecondRowColor('#f3f6fb');
 

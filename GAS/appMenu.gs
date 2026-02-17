@@ -6,25 +6,11 @@
  * This script adds a "Little Leap" menu to the Google Sheet.
  * It provides dialog-based interfaces for managing Users, Roles,
  * Access Control, and Resources.
- * 
- * INSTRUCTIONS:
- * 1. Open your Google Sheet.
- * 2. Go to Extensions > Apps Script.
- * 3. Paste this code into a file (e.g., appMenu.gs).
- * 4. Save and reload the Google Sheet.
  * ============================================================
  */
 
-// ── CONSTANTS ────────────────────────────────────────────────
-const SHEETS = {
-  USERS: 'Users',
-  ROLES: 'Roles',
-  USER_ROLES: 'UserRoles',
-  ROLE_PERMISSIONS: 'RolePermissions',
-  RESOURCES: 'Resources'
-};
+// Shared constants are located in Constants.gs
 
-const UI_COLOR = '#4a86c8'; // Little Leap Brand Color
 
 // ── MENU CREATION ────────────────────────────────────────────
 
@@ -39,7 +25,7 @@ function onOpen() {
       .addItem('Create New Role', 'showCreateRoleDialog')
       .addItem('Update Role Details', 'showUpdateRoleDialog'))
     .addSubMenu(ui.createMenu('Access Control')
-      .addItem('Assign Roles to User', 'showAssignRoleDialog')
+      .addItem('Assign Role to User', 'showAssignRoleDialog')
       .addItem('Manage Role Permissions', 'showManagePermissionsDialog'))
     .addSubMenu(ui.createMenu('Resource Management')
       .addItem('Add New Resource', 'showAddResourceDialog')
@@ -50,11 +36,11 @@ function onOpen() {
 // ── UI SHOW FUNCTIONS ────────────────────────────────────────
 
 function showCreateUserDialog() {
-  showDialog('createUser', 'Create New User', 400, 500);
+  showDialog('createUser', 'Create New User', 400, 600, { roles: getRolesList() });
 }
 
 function showUpdateUserDialog() {
-  showDialog('updateUser', 'Update User Details', 400, 550, { users: getUsersList() });
+  showDialog('updateUser', 'Update User Details', 400, 650, { users: getUsersList(), roles: getRolesList() });
 }
 
 function showToggleUserStatusDialog() {
@@ -70,7 +56,7 @@ function showUpdateRoleDialog() {
 }
 
 function showAssignRoleDialog() {
-  showDialog('assignRole', 'Assign Roles to User', 450, 550, { users: getUsersList(), roles: getRolesList() });
+  showDialog('assignRole', 'Assign Role to User', 400, 400, { users: getUsersList(), roles: getRolesList() });
 }
 
 function showManagePermissionsDialog() {
@@ -100,14 +86,15 @@ function showDialog(action, title, width, height, data = {}) {
 
 function handleCreateUser(form) {
   try {
-    const sheet = getSheet(SHEETS.USERS);
+    const sheet = getSheet(CONFIG.SHEETS.USERS);
     const existing = findRow(sheet, 2, form.email);
     if (existing !== -1) throw new Error('User with this email already exists.');
 
     const nextRow = sheet.getLastRow() + 1;
     const passwordHash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, form.password));
     
-    sheet.getRange(nextRow, 2, 1, 4).setValues([[form.name, form.email, passwordHash, 'Active']]);
+    // Headers: ['UserID', 'Name', 'Email', 'PasswordHash', 'RoleID', 'Status']
+    sheet.getRange(nextRow, 2, 1, 5).setValues([[form.name, form.email, passwordHash, form.roleId, 'Active']]);
     return { success: true, message: `User created: ${form.name}` };
   } catch (e) {
     return { success: false, message: e.message };
@@ -116,12 +103,13 @@ function handleCreateUser(form) {
 
 function handleUpdateUser(form) {
   try {
-    const sheet = getSheet(SHEETS.USERS);
+    const sheet = getSheet(CONFIG.SHEETS.USERS);
     const row = findRow(sheet, 0, form.userId);
     if (row === -1) throw new Error('User not found.');
     
     sheet.getRange(row, 2).setValue(form.name);
     sheet.getRange(row, 3).setValue(form.email);
+    sheet.getRange(row, 5).setValue(form.roleId);
     
     if (form.password) {
        const passwordHash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, form.password));
@@ -136,13 +124,13 @@ function handleUpdateUser(form) {
 
 function handleToggleUserStatus(form) {
   try {
-    const sheet = getSheet(SHEETS.USERS);
+    const sheet = getSheet(CONFIG.SHEETS.USERS);
     const row = findRow(sheet, 0, form.userId);
     if (row === -1) throw new Error('User not found.');
     
-    const currentStatus = sheet.getRange(row, 5).getValue();
+    const currentStatus = sheet.getRange(row, 6).getValue();
     const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
-    sheet.getRange(row, 5).setValue(newStatus);
+    sheet.getRange(row, 6).setValue(newStatus);
     
     return { success: true, message: `User status changed to ${newStatus}.` };
   } catch (e) {
@@ -152,7 +140,7 @@ function handleToggleUserStatus(form) {
 
 function handleCreateRole(form) {
   try {
-    const sheet = getSheet(SHEETS.ROLES);
+    const sheet = getSheet(CONFIG.SHEETS.ROLES);
     const existing = findRow(sheet, 1, form.name);
     if (existing !== -1) throw new Error('Role with this name already exists.');
 
@@ -166,7 +154,7 @@ function handleCreateRole(form) {
 
 function handleUpdateRole(form) {
   try {
-    const sheet = getSheet(SHEETS.ROLES);
+    const sheet = getSheet(CONFIG.SHEETS.ROLES);
     const row = findRow(sheet, 0, form.roleId);
     if (row === -1) throw new Error('Role not found.');
 
@@ -178,32 +166,18 @@ function handleUpdateRole(form) {
   }
 }
 
-function handleSyncRoles(form) {
+function handleAssignRole(form) {
   try {
     const userId = form.userId;
-    const checkedRoles = [];
-    for (const key in form) {
-        if (key.startsWith('role_') && form[key] === true) {
-            checkedRoles.push(key.replace('role_', ''));
-        }
-    }
+    const roleId = form.roleId;
 
-    const sheet = getSheet(SHEETS.USER_ROLES);
-    const data = sheet.getDataRange().getValues();
+    const sheet = getSheet(CONFIG.SHEETS.USERS);
+    const row = findRow(sheet, 0, userId);
+    if (row === -1) throw new Error('User not found.');
     
-    // Remove existing roles for this user
-    for (let i = data.length - 1; i >= 1; i--) {
-        if (data[i][0] == userId) {
-            sheet.deleteRow(i + 1);
-        }
-    }
+    sheet.getRange(row, 5).setValue(roleId);
     
-    // Add checked roles
-    checkedRoles.forEach(roleId => {
-        sheet.appendRow([userId, roleId]);
-    });
-    
-    return { success: true, message: `Roles updated for user.` };
+    return { success: true, message: `Role assigned to user.` };
   } catch (e) {
     return { success: false, message: e.message };
   }
@@ -211,7 +185,7 @@ function handleSyncRoles(form) {
 
 function handleSavePermissions(form) {
   try {
-      const sheet = getSheet(SHEETS.ROLE_PERMISSIONS);
+      const sheet = getSheet(CONFIG.SHEETS.ROLE_PERMISSIONS);
       const roleId = form.roleId;
       const resource = form.resource;
       
@@ -234,7 +208,7 @@ function handleSavePermissions(form) {
 
 function handleAddResource(form) {
   try {
-    const sheet = getSheet(SHEETS.RESOURCES);
+    const sheet = getSheet(CONFIG.SHEETS.RESOURCES);
     const existing = findRow(sheet, 0, form.name);
     if (existing !== -1) throw new Error('Resource with this name already exists.');
     
@@ -256,7 +230,7 @@ function handleAddResource(form) {
 
 function handleEditResource(form) {
   try {
-    const sheet = getSheet(SHEETS.RESOURCES);
+    const sheet = getSheet(CONFIG.SHEETS.RESOURCES);
     const row = findRow(sheet, 0, form.originalName);
     if (row === -1) throw new Error('Resource not found.');
     
@@ -273,29 +247,32 @@ function handleEditResource(form) {
   }
 }
 
-function getUserAssignedRoles(userId) {
-    const sheet = getSheet(SHEETS.USER_ROLES);
-    const data = sheet.getDataRange().getValues();
-    const roles = [];
-    for (let i = 1; i < data.length; i++) {
-        if (data[i][0] == userId) {
-            roles.push(data[i][1]);
-        }
-    }
-    return roles;
+function getUserAssignedRole(userId) {
+    const sheet = getSheet(CONFIG.SHEETS.USERS);
+    const row = findRow(sheet, 0, userId);
+    if (row === -1) return null;
+    return sheet.getRange(row, 5).getValue(); // RoleID is at column 5
 }
 
 
 function getUserDetails(userId) {
-   const sheet = getSheet(SHEETS.USERS);
+   const sheet = getSheet(CONFIG.SHEETS.USERS);
    const row = findRow(sheet, 0, userId);
    if (row === -1) return null;
-   const values = sheet.getRange(row, 1, 1, 5).getValues()[0];
-   return { id: values[0], name: values[1], email: values[2] };
+   const values = sheet.getRange(row, 1, 1, 8).getValues()[0];
+   return { 
+     id: values[0], 
+     name: values[1], 
+     email: values[2], 
+     roleId: values[4],
+     status: values[5],
+     avatar: values[6],
+     apiKey: values[7]
+   };
 }
 
 function getRoleDetails(roleId) {
-   const sheet = getSheet(SHEETS.ROLES);
+   const sheet = getSheet(CONFIG.SHEETS.ROLES);
    const row = findRow(sheet, 0, roleId);
     if (row === -1) return null;
    const values = sheet.getRange(row, 1, 1, 3).getValues()[0];
@@ -303,7 +280,7 @@ function getRoleDetails(roleId) {
 }
 
 function getResourceDetails(resourceName) {
-   const sheet = getSheet(SHEETS.RESOURCES);
+   const sheet = getSheet(CONFIG.SHEETS.RESOURCES);
    const row = findRow(sheet, 0, resourceName);
    if (row === -1) return null;
    const values = sheet.getRange(row, 1, 1, 6).getValues()[0];
@@ -346,7 +323,7 @@ function deletePermissionRows(sheet, roleId, resource) {
 }
 
 function getUsersList() {
-  const sheet = getSheet(SHEETS.USERS);
+  const sheet = getSheet(CONFIG.SHEETS.USERS);
   const data = sheet.getDataRange().getValues();
   const list = [];
   for (let i = 1; i < data.length; i++) {
@@ -356,7 +333,7 @@ function getUsersList() {
 }
 
 function getRolesList() {
-    const sheet = getSheet(SHEETS.ROLES);
+    const sheet = getSheet(CONFIG.SHEETS.ROLES);
     const data = sheet.getDataRange().getValues();
     const list = [];
     for (let i = 1; i < data.length; i++) {
@@ -367,7 +344,7 @@ function getRolesList() {
 
 function getResourcesList() {
     try {
-        const sheet = getSheet(SHEETS.RESOURCES);
+        const sheet = getSheet(CONFIG.SHEETS.RESOURCES);
         const data = sheet.getDataRange().getValues();
         const list = [];
         for (let i = 1; i < data.length; i++) {
@@ -384,14 +361,14 @@ function getHtmlTemplate(action, data) {
   const styles = `
     <style>
       body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #333; }
-      h2 { color: ${UI_COLOR}; margin-top: 0; }
+      h2 { color: ${CONFIG.BRAND_COLOR}; margin-top: 0; }
       .form-group { margin-bottom: 12px; }
       label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 0.85em; }
       input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea {
         width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
       }
       button {
-        background-color: ${UI_COLOR}; color: white; border: none; padding: 10px;
+        background-color: ${CONFIG.BRAND_COLOR}; color: white; border: none; padding: 10px;
         border-radius: 4px; cursor: pointer; font-size: 1em; width: 100%; margin-top: 10px;
       }
       button:hover { background-color: #357ebd; }
@@ -474,36 +451,39 @@ function getHtmlTemplate(action, data) {
           if(origEl && data.name) origEl.value = data.name;
       }
       
-      function loadCurrentRoles(userId) {
+      function loadCurrentRole(userId) {
           if(!userId) return;
-          // Reset all checks 
-          const checks = document.querySelectorAll('.role-check');
-          checks.forEach(c => c.checked = false);
-          
-          google.script.run.withSuccessHandler((roles) => {
-              roles.forEach(roleId => {
-                  const el = document.querySelector('[name="role_' + roleId + '"]');
-                  if(el) el.checked = true;
-              });
-          }).getUserAssignedRoles(userId);
+          google.script.run.withSuccessHandler((roleId) => {
+              const el = document.querySelector('[name="roleId"]');
+              if(el) el.value = roleId || "";
+          }).getUserAssignedRole(userId);
       }
     </script>
   `;
 
   switch(action) {
     case 'createUser':
+      const createRoleOpts = data.roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
       content = `
         <h2>Create User</h2>
         <form id="mainForm" onsubmit="event.preventDefault(); submitForm('handleCreateUser');">
           <div class="form-group"><label>Name</label><input type="text" name="name" required></div>
           <div class="form-group"><label>Email</label><input type="email" name="email" required></div>
           <div class="form-group"><label>Password</label><input type="password" name="password" required></div>
+          <div class="form-group">
+            <label>Assign Role</label>
+            <select name="roleId" required>
+                <option value="">-- Select Role --</option>
+                ${createRoleOpts}
+            </select>
+          </div>
           <button id="submitBtn">Create User</button>
         </form>`;
       break;
 
     case 'updateUser':
       const userOpts = data.users.map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`).join('');
+      const updateRoleOpts = data.roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
       content = `
         <h2>Update User</h2>
         <form id="mainForm" onsubmit="event.preventDefault(); submitForm('handleUpdateUser');">
@@ -517,6 +497,13 @@ function getHtmlTemplate(action, data) {
           <div class="form-group"><label>Name</label><input type="text" name="name" required></div>
           <div class="form-group"><label>Email</label><input type="email" name="email" required></div>
           <div class="form-group"><label>New Password (optional)</label><input type="password" name="password"></div>
+          <div class="form-group">
+            <label>Role</label>
+            <select name="roleId" required>
+                <option value="">-- Select Role --</option>
+                ${updateRoleOpts}
+            </select>
+          </div>
           <button id="submitBtn">Update User</button>
         </form>`;
       break;
@@ -565,27 +552,25 @@ function getHtmlTemplate(action, data) {
       
     case 'assignRole':
       const syncUserOpts = data.users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
-      const syncRoleChecks = data.roles.map(r => `
-        <label class="checkbox-group">
-          <input type="checkbox" name="role_${r.id}" class="role-check"> ${r.name}
-        </label>`).join('');
+      const syncRoleOpts = data.roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
       content = `
-        <h2>Assign/Sync Roles</h2>
-        <form id="mainForm" onsubmit="event.preventDefault(); submitForm('handleSyncRoles');">
+        <h2>Assign Role</h2>
+        <form id="mainForm" onsubmit="event.preventDefault(); submitForm('handleAssignRole');">
            <div class="form-group">
              <label>Select User</label>
-             <select name="userId" onchange="loadCurrentRoles(this.value)" required>
+             <select name="userId" onchange="loadCurrentRole(this.value)" required>
                <option value="">-- Select User --</option>
                ${syncUserOpts}
              </select>
            </div>
            <div class="form-group">
-             <label>Roles (Check to assign, Uncheck to withdraw)</label>
-             <div class="checkbox-list">
-               ${syncRoleChecks}
-             </div>
+             <label>Select Role</label>
+             <select name="roleId" required>
+               <option value="">-- Select Role --</option>
+               ${syncRoleOpts}
+             </select>
            </div>
-           <button id="submitBtn">Sync Roles</button>
+           <button id="submitBtn">Assign Role</button>
         </form>`;
       break;
       

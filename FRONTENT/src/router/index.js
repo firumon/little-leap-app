@@ -26,5 +26,30 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     history: createHistory(process.env.VUE_ROUTER_BASE)
   })
 
+  Router.beforeEach((to, from, next) => {
+    const token = localStorage.getItem('token')
+    const isAuthenticated = !!token
+
+    // Check if the route requires authentication
+    const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+
+    // Public pages (always accessible)
+    const publicPages = ['login', 'landing', 'home']
+    const isPublicPage = publicPages.includes(to.name)
+
+    // Redirect to dashboard if logged in and trying to access public auth pages
+    if (isAuthenticated && (to.name === 'login' || to.name === 'landing')) {
+      return next('/dashboard')
+    }
+
+    // Redirect to login if auth is required and not logged in
+    if (requiresAuth && !isAuthenticated) {
+      return next('/login')
+    }
+
+    // Default: allow navigation
+    next()
+  })
+
   return Router
 })

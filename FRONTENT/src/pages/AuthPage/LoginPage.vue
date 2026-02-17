@@ -6,41 +6,23 @@
     </div>
 
     <q-form @submit="handleLogin" class="q-gutter-md">
-      <q-input
-        filled
-        v-model="loginForm.identifier"
-        label="Username or Email"
-        lazy-rules
-        :rules="[ val => val && val.length > 0 || 'Please enter your unique identifier']"
-      >
+      <q-input filled v-model="loginForm.identifier" label="Username or Email" lazy-rules
+        :rules="[val => val && val.length > 0 || 'Please enter your unique identifier']">
         <template v-slot:prepend>
           <q-icon name="person" color="primary" />
         </template>
       </q-input>
 
-      <q-input
-        filled
-        type="password"
-        v-model="loginForm.password"
-        label="Password"
-        lazy-rules
-        :rules="[ val => val && val.length > 0 || 'Please enter your password']"
-      >
+      <q-input filled type="password" v-model="loginForm.password" label="Password" lazy-rules
+        :rules="[val => val && val.length > 0 || 'Please enter your password']">
         <template v-slot:prepend>
           <q-icon name="lock" color="primary" />
         </template>
       </q-input>
 
       <div class="q-mt-lg">
-        <q-btn
-          label="Login"
-          type="submit"
-          color="primary"
-          class="full-width q-py-sm shadow-2"
-          rounded
-          unelevated
-          :loading="loading"
-        />
+        <q-btn label="Login" type="submit" color="primary" class="full-width q-py-sm shadow-2" rounded unelevated
+          :loading="loading" />
       </div>
 
       <div class="text-center q-mt-md">
@@ -53,8 +35,12 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useQuasar } from 'quasar'
+import { useAuthStore } from 'src/stores/auth'
+import { useRouter } from 'vue-router'
 
 const $q = useQuasar()
+const auth = useAuthStore()
+const router = useRouter()
 const loading = ref(false)
 
 const loginForm = reactive({
@@ -64,16 +50,28 @@ const loginForm = reactive({
 
 async function handleLogin() {
   loading.value = true
-  
-  // Future: Connect to Google Sheets Apps Script
-  setTimeout(() => {
-    loading.value = false
+
+  const result = await auth.login(loginForm.identifier, loginForm.password)
+
+  loading.value = false
+
+  if (result.success) {
     $q.notify({
-      type: 'info',
-      message: 'Authentication logic will be integrated in the next step.',
-      position: 'top'
+      type: 'positive',
+      color: 'secondary',
+      message: 'Logged in successfully',
+      position: 'top',
+      timeout: 2000
     })
-  }, 1500)
+    router.push('/dashboard')
+  } else {
+    $q.notify({
+      type: 'negative',
+      message: result.message || 'Login failed. Please check your credentials.',
+      position: 'top',
+      timeout: 3000
+    })
+  }
 }
 </script>
 
@@ -83,7 +81,14 @@ async function handleLogin() {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 </style>

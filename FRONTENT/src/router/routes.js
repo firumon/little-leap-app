@@ -34,8 +34,10 @@ const routes = [
   {
     path: '/dashboard',
     component: () => import('layouts/MainLayout/MainLayout.vue'),
+    meta: { requiresAuth: true },
     children: [
-      { path: '', component: () => import('pages/DashboardPage/DashboardPage.vue') }
+      { path: '', component: () => import('pages/Dashboard/DashboardIndex.vue') },
+      { path: '/profile', component: () => import('pages/ProfilePage/ProfilePage.vue') }
     ]
   },
 
@@ -43,7 +45,8 @@ const routes = [
   // but you can also remove it
   {
     path: '/:catchAll(.*)*',
-    component: () => import('pages/ErrorNotFound/ErrorNotFound.vue')
+    component: () => import('pages/ErrorNotFound/ErrorNotFound.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
