@@ -1054,6 +1054,11 @@
   gap: var(--aql-metrics-gap);
 }
 
+// Gutter tokens, so a caller picks a Quasar size instead of a pixel value.
+.aql-metrics--gutter-xs > .aql-metrics__row { --aql-metrics-gap: #{map-get($space-xs, x)}; }
+.aql-metrics--gutter-sm > .aql-metrics__row { --aql-metrics-gap: #{map-get($space-sm, x)}; }
+.aql-metrics--gutter-md > .aql-metrics__row { --aql-metrics-gap: #{map-get($space-md, x)}; }
+
 // The row WRAPS (see MetricCards.vue's `colClassFor`), and Quasar's `col-*` set a
 // plain percentage width that knows nothing about the gap above — `col-6` twice is
 // 100% + one gap, which wraps every card onto its own line. Each span therefore gives
