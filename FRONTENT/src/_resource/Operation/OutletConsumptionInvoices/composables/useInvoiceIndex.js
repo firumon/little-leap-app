@@ -433,7 +433,7 @@ const shared = defineSharedComposable((dataStore) => {
       // Cancelled rows included on purpose: Recent answers "what moved lately", and a
       // cancellation is a move.
       Recent: [...all].sort(byUpdatedDesc).slice(0, RECENT_LIMIT),
-      DueIn: all.filter((row) => isOpen(row.invoice) && row.dueInDays !== null && row.dueInDays >= 0 && row.dueInDays <= 7)
+      DueIn: all.filter((row) => isOpen(row.invoice) && row.dueInDays !== null && row.dueInDays >= 0)
         .sort((a, b) => a.dueInDays - b.dueInDays),
       Overdue: all.filter((row) => row.isOverdue).sort((a, b) => a.dueInDays - b.dueInDays),
       // Oldest touched first: a part payment that has sat longest is the one going stale.

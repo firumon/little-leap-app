@@ -28,7 +28,7 @@ export function elapsedLabel (value) {
   if (gap < DAY) return `${Math.floor(gap / HOUR)} hours ago`
   const days = Math.floor(gap / DAY)
   if (days <= 99) return `${days} days ago`
-  return `${Math.floor(days / 30)} months`
+  return `${Math.floor(days / 30)} months ago`
 }
 
 // How late, or how soon. `dueInDays` is negative once the date has passed and `null` when
