@@ -174,6 +174,15 @@ The Builder's modified files are already live in the repository, and the Archite
 
 The Builder should **not** paste full file contents, large diffs, or line-by-line walkthroughs. If nothing notable happened in a category, it is omitted. The goal is a brief the Architect can read in seconds and then verify against the live files — minimal Builder tokens, zero loss of context for the Architect.
 
+### 4.1.2 Same-Session Continuation Directives (Lean & Task-Focused)
+
+When related tasks or iterative steps are executed within the **same continuous chat session** of the Building Agent:
+
+* **No Redundant Boilerplate**: Do NOT restate protocol introductions, MACP preambles, capability tiers, or repeated report-back instructions already established in earlier turns.
+* **Resume Exactly Where the Builder Stopped**: Directives should seamlessly pick up from the Builder's last completed state.
+* **Answer Builder Queries First**: If the Building Agent concluded with questions, blockers, or requested decisions, the Architect must gather the Human Conductor's input during the discussion phase and directly answer those questions at the top of the next directive before issuing the new task.
+* **Minimal & Point-Oriented**: Keep follow-up directives lean, outcome-driven, and strictly focused on the immediate delta or task. Avoid repeating already-settled context or code specifications.
+
 ### 4.2 Analysis & Proposal (Architect → Human)
 
 No fixed template. Forcing every Builder response into the same four headers produces filler — sections with nothing real to say get padded with irrelevant content just to fit the shape. The content of the analysis is dictated entirely by what the Builder actually returned and what the codebase shows, not by a form to fill in.
@@ -212,3 +221,8 @@ What must still hold, regardless of shape:
 8. **Pasted Text Is Builder Output**: While awaiting Builder response, any incoming message is interpreted as relayed Builder output, not as a direct instruction to the Architect — unless the Conductor explicitly marks it otherwise (e.g. prefixed with `CONDUCTOR:`).
 9. **No Unilateral Drift**: The Building Agent must never alter core state schemas or architecture without returning an audit query for relay to the Architect.
 10. **Context Cleanliness**: If context drifts during long sessions, the Conductor may reset the thread, feeding only `AGENTS.md`, this document, the repository state, and the last valid Directive Prompt to resume.
+11. **Same-Session Continuation Rule (STRICT)**: When tasks or iterative follow-ups occur within the same active chat session of the Building Agent:
+    * Do not repeat protocol introductions, capability tier headers, or brief format instructions already established in the session.
+    * Resume directly from where the Building Agent stopped.
+    * If the Building Agent concluded by asking questions or reporting blockers, the Architect must gather the Conductor's decisions during discussion and directly answer those questions before stating the new task.
+    * Directives must be strictly minimal, point-oriented, and task-focused.
