@@ -1,16 +1,15 @@
-// The wizard keeps the whole submission live in pageState, so this bar only gates the steps.
-// `actions` must stay a getter, or the step read is not tracked (UI_ACTION_SYSTEM.md §1.3).
+// The wizard keeps the whole submission live in pageState, so this bar only gates the steps
+// and reads Layer 2's verdict. `actions` must stay a getter, or the step read is not tracked
+// (UI_ACTION_SYSTEM.md §1.3).
 import { INVOICE_GENERATED_MESSAGE } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoicePayload'
+import {
+  invoiceDraftBlock,
+  invoiceDraftLines
+} from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceDraft'
 
 const NODE = 'OutletConsumptionInvoices'
-const ITEMS = 'OutletConsumptionInvoiceItems'
-const BUILD_ERROR = 'BuildError'
 
 const text = (value) => (value == null ? '' : String(value).trim())
-const num = (value) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
 
 export default (props, { pageState }) => {
   const node = pageState.useNode(NODE)
@@ -18,9 +17,6 @@ export default (props, { pageState }) => {
   // Defaults to 1: an unset step would fall past the step-1 branch into the item check.
   const step = () => pageState.meta?.currentStep || 1
   const outlet = () => text(node.record.value?.OutletCode)
-  const lines = () => pageState.getChildRows(ITEMS, NODE).filter((row) => num(row.Qty) > 0)
-  // What the last Layer 2 rebuild refused, in its own words. The domain decides the message.
-  const buildError = () => text(pageState.getControls(BUILD_ERROR, null, NODE))
 
   return {
     get actions () {
@@ -42,20 +38,16 @@ export default (props, { pageState }) => {
         if (!outlet()) return { valid: false, message: 'Select an outlet to continue.' }
         return undefined
       }
-      if (!lines().length) {
+      if (!invoiceDraftLines(pageState).length) {
         return { valid: false, message: 'Add at least one item with a quantity before continuing.' }
       }
       return undefined
     },
 
+    // Validation only. The live nodes ARE the batch, so nothing is built here.
     submit: () => {
-      if (!outlet()) return { valid: false, message: 'Select an outlet to continue.' }
-      if (!lines().length) {
-        return { valid: false, message: 'Add at least one item with a quantity before continuing.' }
-      }
-      const refused = buildError()
+      const refused = invoiceDraftBlock(pageState)
       if (refused) return { valid: false, message: refused }
-
       return { successMsg: INVOICE_GENERATED_MESSAGE }
     }
   }

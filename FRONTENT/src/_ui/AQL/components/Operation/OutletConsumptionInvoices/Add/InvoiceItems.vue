@@ -1,12 +1,9 @@
 <template>
-  <div v-if="isActive" :class="gutterClass">
+  <div v-if="visible" :class="gutterClass">
     <SectionDividerLabel label="ITEMS TO BILL" />
 
-    <!-- The one consequence people do not expect. An invoice raised WITHOUT a consumption
-         behind it bills the outlet but changes no shelf: there was no count to deduct from
-         the outlet, and no allocation to deduct from a warehouse. Said loudly, and only when
-         it applies — a banner shown on every invoice would be read past on the one that
-         matters (§10.4). -->
+    <!-- An invoice raised WITHOUT a consumption behind it bills the outlet but changes no
+         shelf: there was no count to deduct. Said only when it applies. -->
     <q-banner v-if="isDirectInvoice" dense rounded class="bg-orange-1 text-body2">
       <template #avatar><q-icon name="warning" color="warning" /></template>
       Creating an invoice directly without a consumption will not record any outlet or
@@ -25,9 +22,8 @@
           <q-item-section :class="ui.flexWrapTextClass">
             <q-item-label class="text-weight-medium">{{ line.Qty }} x {{ line.primary }}</q-item-label>
             <q-item-label caption>{{ line.secondary }}</q-item-label>
-            <!-- Only when there is something to disambiguate. With ONE consumption ticked
-                 every line came from it, so a source line under each row restates the header
-                 for every item and tells the reader nothing. -->
+            <!-- With ONE consumption ticked every line came from it, so a source line under
+                 each row tells the reader nothing. -->
             <q-item-label
               v-for="source in (showSources ? line.sources : [])"
               :key="source.key"
@@ -39,25 +35,35 @@
 
           <q-item-section side>
             <div class="row items-center no-wrap q-gutter-x-sm">
+              <div style="width: 72px">
+                <component
+                  :is="NumberField"
+                  :model-value="line.Qty"
+                  :record="line"
+                  :config="{ dense: true, inputClass: 'text-center' }"
+                  header="Qty"
+                  @update:model-value="(value) => setLine(line.at, 'Qty', value)"
+                />
+              </div>
               <div style="width: 96px">
                 <component
                   :is="CurrencyField"
-                  :model-value="line.price"
+                  :model-value="line.Price"
                   :record="line"
                   :config="{ label: 'Unit price', inputClass: 'text-right text-weight-bold' }"
                   header="Price"
-                  @update:model-value="(value) => setLinePrice(line.SKU, value)"
+                  @update:model-value="(value) => setLine(line.at, 'Price', value)"
                 />
               </div>
-              <!-- Only a manually added line can be dropped here: a counted line's quantity
-                   is a physical fact, and removing it would under-bill with no record. -->
+              <!-- Only a hand-added line goes. A counted quantity is a fact; untick the
+                   consumption instead. -->
               <q-btn
                 v-if="line.manual"
                 flat round dense
                 icon="close"
                 color="negative"
                 :aria-label="`Remove ${line.primary}`"
-                @click="removeLine(line.SKU)"
+                @click="removeLine(line.at)"
               />
             </div>
           </q-item-section>
@@ -65,23 +71,16 @@
       </q-list>
     </q-card>
 
-    <!-- The SHARED drawer — the same control the consumption wizard's restock and return
-         steps use, so "add another item" is one recurring pattern rather than three similar
-         ones. It owns the filter, the row rhythm and the leave transition; the quantity box
-         and the add button are this wizard's own.
-         Hidden once every SKU is on the bill: a drawer promising items and opening onto
-         nothing is worse than no control. -->
+    <!-- The SHARED drawer, the same control the consumption wizard uses, so "add another
+         item" is one recurring pattern rather than three similar ones. -->
     <AqlAddItemsExpansion
       :items="visibleCandidates"
       label="Add more items"
       search-label="Search items to bill"
-      :caption="`${skuCandidates.length} more item(s) available`"
+      :caption="`${candidates.length} more item(s) available`"
       :card-class="ui.cardClass + ' q-py-sm'"
     >
       <template #row="{ option }">
-        <!-- Quantity only. The price belongs to the LINE, not to the act of adding one: once
-             the item is on the bill above it gets the same editable unit-price box every
-             other line has, so asking for it twice would be two controls for one value. -->
         <div class="row items-center no-wrap q-gutter-x-sm">
           <div style="width: 72px">
             <component
@@ -107,67 +106,80 @@
 </template>
 
 <script setup>
-// Step 2 - the bill's lines and their prices. Ticked counts are grouped one row per SKU.
-// The price list is a default, not the law: an edited price is passed to the engine as a
-// resolver, so tax, discount and the payable all move with it.
+// Step 2 - the bill's lines and their prices. Ticked counts arrive grouped one row per SKU.
+// A typed price is stored ON the line, and Layer 2 re-prices tax, discount and the payable
+// around it.
 import { computed, reactive, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import AqlAddItemsExpansion from 'components/shared/AqlAddItemsExpansion.vue'
 import { resolveFieldComponent } from 'src/_fields/useFieldResolver'
-import { useInvoiceAddContext } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Add/useInvoiceAddContext'
+import {
+  useInvoiceAddContext,
+  NODE,
+  ITEMS,
+  stepVisible
+} from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Add/useInvoiceAddContext'
 
 defineOptions({ name: 'OutletConsumptionInvoicesAddInvoiceItems', inheritAttrs: false })
 
-const props = defineProps({
-  step: { type: [Number, String], default: 2 }
-})
+const props = defineProps({ step: { type: [Number, String], default: 2 } })
+
+const CANDIDATE_LIMIT = 25
 
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
-const CurrencyField = resolveFieldComponent('currency', 'add')
+const { pageState, ui, skuLabelOf, skuCandidatesFor } = useInvoiceAddContext()
+
 const NumberField = resolveFieldComponent('number', 'add')
+const CurrencyField = resolveFieldComponent('currency', 'add')
 
-const {
-  ui, money, groupedLines, invoice, selectedCodes,
-  skuCandidatesFor, setLinePrice, removeLine, addExtraItem, step: currentStep
-} = useInvoiceAddContext()
+const visible = computed(() => stepVisible(pageState, props.step))
 
-// With one count ticked every line came from it, so naming the source tells nobody anything.
-const showSources = computed(() => selectedCodes.value.length > 1)
+const text = (value) => (value == null ? '' : String(value).trim())
+const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
 
-const isActive = computed(() =>
-  props.step == null || Number(props.step) === currentStep.value)
+const node = pageState.useNode(NODE)
 
-// Per-candidate quantity, keyed by SKU. Entries are dropped once added.
-const pendingQty = reactive({})
-
-// Nothing counted behind this bill, so no stock anywhere moves. The banner says so.
-const isDirectInvoice = computed(() => !selectedCodes.value.length)
-
-const skuCandidates = computed(() => skuCandidatesFor(''))
-// Capped for the same reason, and the drawer's own filter narrows what is shown within it.
-const visibleCandidates = computed(() => skuCandidates.value.slice(0, 25))
-
-// Joined to the calculated lines, never recalculated: the same array the review step totals.
 const lines = computed(() => {
-  const calculated = new Map(invoice.value.lines.map((line) => [line.SKU, line]))
-  return groupedLines.value.map((line) => {
-    const priced = calculated.get(line.SKU) || {}
+  void node.value
+  return pageState.getChildRows(ITEMS, NODE).map((row, at) => {
+    const label = skuLabelOf(row.SKU)
     return {
-      ...line,
-      price: Number(priced.Price) || 0,
-      total: Number(priced.Total) || 0,
-      tax: Number(priced.TaxAmount) || 0,
-      manual: line.manual
+      at,
+      SKU: text(row.SKU),
+      Qty: num(row.Qty),
+      Price: num(row.Price),
+      sources: Array.isArray(row._sources) ? row._sources : [],
+      manual: row._manual === true,
+      primary: label.primary,
+      secondary: label.secondary
     }
   })
 })
 
+// Nothing counted behind this bill, so no stock anywhere moves. The banner says so.
+const isDirectInvoice = computed(() =>
+  !text(pageState.getRecord('OutletConsumptionCode', NODE)))
+
+// With one count ticked every line came from it, so naming the source says nothing.
+const showSources = computed(() =>
+  text(pageState.getRecord('OutletConsumptionCode', NODE)).split(',').filter(Boolean).length > 1)
+
+const candidates = computed(() => skuCandidatesFor('', lines.value.map((line) => line.SKU)))
+const visibleCandidates = computed(() => candidates.value.slice(0, CANDIDATE_LIMIT))
+
+const pendingQty = reactive({})
+
+const setLine = (at, key, value) => pageState.setChildren(ITEMS, at, key, num(value), NODE)
+
+const removeLine = (at) => pageState.removeChild(ITEMS, at, NODE)
+
 function addItem (sku) {
-  addExtraItem(sku, pendingQty[sku] ?? 1)
-  // Removed rather than reset: the SKU has left the candidate list, so its entry is dead
-  // weight — and if the user removes the line and re-adds it, it should start at 1 again.
-  delete pendingQty[sku]
+  const code = text(sku)
+  const qty = num(pendingQty[code] ?? 1)
+  if (!code || qty <= 0) return
+  pageState.addChild(ITEMS, { SKU: code, Qty: qty, _manual: true, _sources: [] }, NODE)
+  delete pendingQty[code]
 }
 </script>

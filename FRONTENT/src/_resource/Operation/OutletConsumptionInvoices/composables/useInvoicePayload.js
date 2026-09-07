@@ -19,14 +19,19 @@ import {
   buildTaxTransactionReplacementNodes,
   buildTaxTransactionReversalNodes
 } from 'src/_resource/Accounts/TaxTransactions/composables/useTaxTransactionPayload'
-import { INVOICE_GENERATED } from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionProgress'
+import {
+  INVOICE_GENERATED,
+  PENDING_INVOICE_GENERATION,
+  consumptionCodesOf
+} from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionProgress'
 import {
   validateInvoiceDraft,
-  validateSettlement,
   settlementGate,
   transitionForBalance,
   progressOf,
-  PENDING_PAYMENT
+  PENDING_PAYMENT,
+  PAID,
+  CANCELLED
 } from './useInvoiceWorkflow'
 import { nodePayloadForParent, changedInvoiceItemRows } from 'src/_resource/Operation/OutletConsumptionInvoiceItems/composables/useInvoiceItemPayload'
 const INVOICES = 'OutletConsumptionInvoices'
@@ -399,10 +404,24 @@ export function buildInvoiceBalanceTransitionNodes ({
   const transition = transitionForBalance(invoice, balance)
   if (!transition) return []
 
+  const stamp = stampFields(transition.stamp, actorName, text(comment) || transition.comment)
+
+  // Only the walk to PAID is an audited action; the sheet registers no action for the other
+  // two, so they are written straight onto the record.
+  if (transition.columnValue !== PAID) {
+    return [{
+      resource: INVOICES,
+      code: textOrRef(code),
+      record: { Progress: transition.columnValue, ...stamp },
+      reload: [INVOICES]
+    }]
+  }
+
   return [
-    { resource: INVOICES, actions: [{ ...{
-      action: transition.action, column: 'Progress', columnValue: transition.columnValue
-    }, code: textOrRef(code), data: { fields: stampFields(transition.stamp, actorName, text(comment) || transition.comment) } }], reload: [INVOICES] }
+    { resource: INVOICES, actions: [{
+      action: 'SettleInvoice', column: 'Progress', columnValue: PAID,
+      code: textOrRef(code), data: { fields: stamp }
+    }], reload: [INVOICES] }
   ]
 }
 
@@ -428,41 +447,80 @@ export function buildSettlementNodes ({
 
   const owed = Array.isArray(payments) || balanceDue === null ? gate.balance : num(balanceDue)
 
-  const check = validateSettlement({ record: invoice, reason, comment, mismatchAmount, balanceDue: owed })
-  if (!check.valid) return [{ valid: false, message: check.message }]
+  // A blank amount means the whole gap, which is what almost every settlement writes off.
+  const mismatch = mismatchAmount === null || mismatchAmount === '' ? num(owed) : num(mismatchAmount)
+  const note = text(comment) || (text(reason) ? `Settled: ${text(reason)}.` : 'Invoice settled.')
 
-  const note = text(comment) || `Settled: ${check.settlement.SettlementReason}.`
-
-  // The audited action, not a plain field write: GAS gates it on `markPaid`, so a role
-  // granted settlement without record-edit rights can still close the invoice.
-  return [
-    { resource: INVOICES, actions: [{
-      action: 'MarkPaid', column: 'Progress', columnValue: 'PAID',
-      code: textOrRef(code),
-      data: { fields: {
-        SettlementReason: check.settlement.SettlementReason,
-        SettlementMismatchAmount: check.settlement.SettlementMismatchAmount,
-        ...stampFields('ProgressPaid', actorName, note)
-      } }
-    }], reload: [INVOICES], permissions: { markPaid: 'You are not allowed to settle this invoice.' }, successMsg: 'Invoice settled.' }
-  ]
+  // A pure record node, not a queued action: the page keeps this batch standing while the
+  // reason is chosen, so submit sends it as it is. The missing reason is the bar's gate —
+  // refusing here would leave the page with no nodes to show.
+  return [{
+    resource: INVOICES,
+    code: textOrRef(code),
+    record: {
+      Progress: PAID,
+      SettlementReason: text(reason),
+      SettlementMismatchAmount: mismatch,
+      ...stampFields('ProgressPaid', actorName, note)
+    },
+    reload: [INVOICES],
+    permissions: { settleInvoice: 'You are not allowed to settle this invoice.' },
+    successMsg: 'Invoice settled.'
+  }]
 }
 
 // ─── 4. Cancellation ──────────────────────────────────────────────────────────
 
 // Cancel an invoice and release everything it held. Without the reversal the consumptions
 // and returns stay locked to an invoice that no longer bills them.
-export function buildCancellationNodes ({ record = {}, comment = '', actorName = '', returnRows = [], taxTransactionRows = null } = {}) {
+export function buildCancellationNodes ({
+  record = {},
+  comment = '',
+  actorName = '',
+  returnRows = [],
+  taxTransactionRows = null,
+  skipConsumptionCodes = []
+} = {}) {
   const invoice = asRow(record)
   const code = text(invoice.Code)
   if (!code) return [{ valid: false, message: 'The invoice could not be identified.' }]
-  if (!text(comment)) return [{ valid: false, message: 'A cancellation comment is required.' }]
 
   const credits = (Array.isArray(returnRows) ? returnRows : []).map(asRow).filter((row) => text(row.Code))
 
-  const nodes = [{ resource: INVOICES, actions: [{ ...{
-    action: 'Cancel', column: 'Progress', columnValue: 'CANCELLED'
-  }, code: textOrRef(code), data: { fields: stampFields('ProgressCancelled', actorName, text(comment)) } }], reload: [INVOICES] }]
+  // A pure record node, not a queued action: the page keeps this batch standing while the
+  // reason is typed, so submit sends it as it is. The empty reason is the bar's gate, not
+  // this builder's — refusing here would leave the page with no nodes to show.
+  const nodes = [{
+    resource: INVOICES,
+    code: textOrRef(code),
+    record: {
+      Progress: CANCELLED,
+      ...stampFields('ProgressCancelled', actorName, text(comment))
+    },
+    reload: [INVOICES],
+    permissions: { cancel: 'You are not allowed to cancel this invoice.' },
+    successMsg: 'Invoice cancelled.'
+  }]
+
+  // The bill no longer bills them, so every consumption it carried goes back to the
+  // invoiceable queue. `skipConsumptionCodes` is how a caller that is CANCELLING one of
+  // those consumptions keeps this from un-cancelling it.
+  const skipped = new Set(codeList(skipConsumptionCodes))
+  consumptionCodesOf(invoice)
+    .filter((consumptionCode) => !skipped.has(consumptionCode))
+    // One role per code, or these collapse onto one node.
+    .forEach((consumptionCode, index) => nodes.push({
+      resource: CONSUMPTIONS,
+      role: `consumptionPending${index}`,
+      code: textOrRef(consumptionCode),
+      record: {
+        Progress: PENDING_INVOICE_GENERATION,
+        ...stampFields('ProgressPendingInvoiceGeneration', actorName,
+          `Invoice ${code} cancelled, makes consumption back to pending..`)
+      },
+      reload: [CONSUMPTIONS],
+      permissions: { update: 'You are not allowed to update consumptions.' }
+    }))
 
   // Reversing the credit is the OutletReturns domain's own inverse of the forward link, so
   // both directions are written by one owner and cannot drift apart.

@@ -85,15 +85,10 @@ export function useInvoiceIndexContext () {
 
     canCreate: computed(() => canCreateInvoice()),
 
-    /**
-     * Open the configured `MarkPaid` settlement dialog for one invoice, from a list row.
-     *
-     * Routed through `runAction` rather than through a local dialog on purpose: the action's
-     * fields, its `visibleWhen` gate and its permission check all live in the GAS config, and
-     * a hand-rolled dialog here would be a second, ungated settlement path that drifts from
-     * the one the View page's FAB uses (UI_ACTION_SYSTEM.md §7).
-     */
-    settleInvoice: (record) => runAction('MarkPaid', record),
+    // Routed through `runAction`, not a local dialog: the action's gate and its permission
+    // live in the GAS config, and a hand-rolled dialog would be a second, ungated path
+    // (UI_ACTION_SYSTEM.md §7).
+    settleInvoice: (record) => runAction('SettleInvoice', record),
 
     /** Open one invoice. */
     openInvoice: (code) => {

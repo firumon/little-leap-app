@@ -174,9 +174,13 @@ export function canEditInvoice (record) {
   return !!gate().allowed({ outletConsumptionInvoice: 'update' }) && progressOf(record) === PENDING_PAYMENT
 }
 
-export function canRecordPayment (record) {
-  return !!gate().allowed({ outletConsumptionInvoice: 'update' }) && isOpen(record)
+// Taking money is the PAYMENTS resource's own right, not an edit on the invoice: a
+// collector may create a payment without ever being allowed to change the bill.
+export function canMakePayment (record) {
+  return !!gate().allowed({ outletPayment: 'create' }) && isOpen(record)
 }
+
+export const canRecordPayment = canMakePayment
 
 /**
  * Forced settlement claims the registered `markPaid` action, not generic `update`: a role
@@ -184,9 +188,14 @@ export function canRecordPayment (record) {
  * additionally on the document still being open — a PAID invoice has nothing to settle and
  * a CANCELLED one must not be resurrected into PAID.
  */
-export function canMarkPaid (record) {
-  return !!gate().allowed({ outletConsumptionInvoice: 'markPaid' }) && isOpen(record)
+export function canSettleInvoice (record) {
+  const allowed = gate().allowed({ outletConsumptionInvoice: 'settleInvoice' }) ||
+    // The sheet action was renamed; a tenant still on the old grant keeps its rights.
+    gate().allowed({ outletConsumptionInvoice: 'markPaid' })
+  return !!allowed && isOpen(record)
 }
+
+export const canMarkPaid = canSettleInvoice
 
 /**
  * Cancellation is OWNER-ONLY and never available once money has been collected.
@@ -367,7 +376,9 @@ export function useInvoiceWorkflow () {
     canCreateInvoice,
     canEditInvoice,
     canRecordPayment,
+    canMakePayment,
     canMarkPaid,
+    canSettleInvoice,
     canCancelInvoice,
     settlementGate,
     validateSettlement,

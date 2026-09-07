@@ -1,26 +1,22 @@
-/**
- * OutletConsumptionInvoices › Add — page contract (tier CP: resource + page specific).
- *
- * The 3-step invoice generator. Each card renders only on its own step and the sticky
- * form-actions bar owns every move between them (`Add/PageAction.js`), so no step card
- * carries navigation of its own.
- *
- *   1  SelectConsumptions   outlet, price list, and which recorded counts to bill
- *   2  InvoiceItems         the resulting lines, grouped by SKU, with editable prices
- *   3  InvoiceReview        due date, discount, credited returns, and the total
- *
- * The step number is passed as a PROP rather than hardcoded in each card, so the running
- * order lives here — the same arrangement the restock wizard uses.
- *
- * `sections` carries only the header: the wizard's own cards are `contents`, because they
- * are the page's subject rather than furniture around it.
- */
+import {
+  buildInvoiceInitNodes,
+  invoiceDraftDerivations
+} from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceDraft'
+
+const RESOURCE = 'OutletConsumptionInvoices'
+
+// OutletConsumptionInvoices > Add - the 3-step invoice generator. One card per decision;
+// the button table per step lives in `Add/PageAction.js`.
 export default {
   sections: ['PageHeader'],
   contents: [
+    'SelectOutlet',
     'SelectConsumptions',
+    'InvoiceBasic',
     'InvoiceItems',
-    'InvoiceReview'
+    'InvoiceDiscounts',
+    'InvoiceReturns',
+    'InvoiceSummary'
   ],
 
   PropsPageHeader: {
@@ -28,10 +24,24 @@ export default {
     reload: false
   },
 
+  PropsSelectOutlet: { step: 1 },
   PropsSelectConsumptions: { step: 1 },
+  PropsInvoiceBasic: { step: 1 },
   PropsInvoiceItems: { step: 2 },
-  PropsInvoiceReview: { step: 3 }
+  PropsInvoiceDiscounts: { step: 3 },
+  PropsInvoiceReturns: { step: 3 },
+  PropsInvoiceSummary: { step: 3 },
+
+  // Page.vue keeps ONE pageState per Page mount and never clears it, so the nodes and
+  // DERIVES of the last page visited are still here. Flush them, then mount the draft the
+  // domain builds. This contract lists no columns of its own (UI_PAGE_STATE_NODES §5.7A).
+  ready ({ pageState, routeInfo }) {
+    const query = routeInfo.value.query || {}
+    pageState.resetForResource(RESOURCE)
+    pageState.derive(invoiceDraftDerivations())
+    pageState.applyNodes(buildInvoiceInitNodes({
+      outletCode: String(query.outletCode || '').trim(),
+      consumptionCode: String(query.consumptionCode || '').trim()
+    }))
+  }
 }
-
-
-
