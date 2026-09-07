@@ -1,33 +1,41 @@
-import { inject, computed } from 'vue'
-import { evaluateProp } from 'src/composables/resources/useSectionResolver'
+import { inject, computed, onMounted, watch } from 'vue'
+import { useRecord } from 'src/composables/resources/useRecord'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
-import { useRecord } from 'src/composables/resources/useRecord'
 import { useCurrencyResource } from 'src/_resource/Master/Currencies/composables/useCurrencyResource'
 import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
 import { usePriceListResource } from 'src/_resource/Master/PriceLists/composables/usePriceListResource'
 import { useInvoiceIndex } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceIndex'
 import {
   invoiceCurrencyOf,
-  makeLineTaxResolver
+  storedTaxBreakdown,
+  grandTotalOf,
+  invoicePolicyOf,
+  PRE_TAX
 } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceCalculation'
 import {
-  editableInvoiceItems,
-  invoiceEditDefaults,
-  makeStoredPriceResolver,
-  recalculateStoredInvoice
-} from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoicePayload'
-import { canEditInvoice, progressMetaOf, isPaid, isCancelled } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceWorkflow'
+  INVOICE_CONTROL,
+  INVOICE_LINE_BASE_PRICE,
+  creditedReturnsOfInvoice,
+  buildInvoiceEditInitNodes,
+  invoiceEditDerivations,
+  syncInvoiceEdit
+} from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceDraft'
+import {
+  canEditInvoice,
+  progressMetaOf,
+  isPaid,
+  isCancelled
+} from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceWorkflow'
 
-// The real resource node. The edit's answers are CONTROLS on it: the record columns are
-// written by `buildInvoiceUpdateNodes`, never typed straight onto the node.
 export const NODE = 'OutletConsumptionInvoices'
+export const ITEMS = 'OutletConsumptionInvoiceItems'
+
+/** Relayed from the domain, never restated: the derive rules address the same names. */
+export const CTRL = INVOICE_CONTROL
 
 const text = (value) => (value == null ? '' : String(value).trim())
-const num = (value) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
+const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
 
 export function useInvoiceEditContext () {
   const resourceRecord = inject('resourceRecord', null)
@@ -44,130 +52,114 @@ export function useInvoiceEditContext () {
   const record = computed(() => resourceRecord?.record?.value || null)
   const code = computed(() => text(record.value?.Code))
 
-  const items = computed(() => editableInvoiceItems(record.value || {}))
-  const defaults = computed(() => invoiceEditDefaults(record.value || {}))
-
-  // The node outlives a route change, so answers typed against another invoice are ignored.
-  const ownsAnswers = () => text(pageState?.useNode(NODE).node.value.code) === code.value
-
-  const field = (header) => (ownsAnswers() ? pageState?.getControls(header, null, NODE) : undefined)
-
-  const setField = (header, value) => {
-    if (!pageState?.hasNode(NODE)) pageState?.initResource(NODE, { isPrimaryKey: true, code: code.value })
-    pageState?.setControls(header, value, NODE)
+  // The cards only mount once the wrapper has the record, so the first card here is the
+  // right moment to raise the live batch. The guard keeps the other five off it.
+  if (pageState && !pageState.hasNode(NODE) && record.value?.Code) {
+    pageState.applyNodes(buildInvoiceEditInitNodes(record.value))
+    pageState.derive(invoiceEditDerivations(record.value))
   }
 
-  const dueDate = computed({
-    get: () => text(field('DueDate')) || defaults.value.dueDate,
-    set: (value) => setField('DueDate', text(value))
-  })
+  const node = pageState.useNode(NODE)
+  const live = computed(() => node.exists.value)
+  const form = computed(() => node.record.value || {})
 
-  const discountType = computed({
-    get: () => text(field('DiscountType')) || defaults.value.discountType,
-    set: (value) => setField('DiscountType', text(value) || 'FLAT')
-  })
+  const locked = computed(() => !!record.value && !canEditInvoice(record.value))
 
-  const discountValue = computed({
-    get: () => {
-      const typed = field('DiscountValue')
-      return typed === undefined || typed === null || typed === '' ? defaults.value.discountValue : num(typed)
-    },
-    set: (value) => setField('DiscountValue', num(value))
-  })
-
-  const priceListCode = computed({
-    get: () => text(field('PriceListCode')) || defaults.value.priceListCode,
-    set: (value) => setField('PriceListCode', text(value))
-  })
+  const dueDate = pageState.useRecord('DueDate', NODE)
+  const priceListCode = pageState.useRecord('PriceListCode', NODE)
+  const discountType = pageState.useControls(CTRL.DISCOUNT_TYPE, 'FLAT', NODE)
+  const discountValue = pageState.useControls(CTRL.DISCOUNT_VALUE, 0, NODE)
 
   const priceListOptions = computed(() => (activePriceLists.value || [])
     .map((list) => ({ value: list.code, label: list.name || list.code })))
 
-  const priceOverrides = computed({
-    get: () => {
-      const value = field('PriceOverrides')
-      return value && typeof value === 'object' ? value : {}
-    },
-    set: (value) => setField('PriceOverrides', value && typeof value === 'object' ? value : {})
+  const priceListName = computed(() => {
+    const list = getPriceList(priceListCode.value)
+    return text(list?.name || list?.Name) || text(priceListCode.value)
   })
 
-  const setLinePrice = (sku, value) => {
-    const key = text(sku)
-    if (!key) return
-    priceOverrides.value = { ...priceOverrides.value, [key]: num(value) }
-  }
-
-  const resetLinePrice = (sku) => {
-    const key = text(sku)
-    const { [key]: dropped, ...rest } = priceOverrides.value
-    priceOverrides.value = rest
-  }
+  const priceListSwitched = computed(() =>
+    !!text(priceListCode.value) && text(priceListCode.value) !== text(record.value?.PriceListCode))
 
   const outletName = computed(() => {
     const outlet = text(record.value?.OutletCode)
     return outletNameByCode.value.get(outlet) || outlet
   })
 
-  const priceListName = computed(() => {
-    const list = getPriceList(priceListCode.value)
-    return text(list?.name || list?.Name) || priceListCode.value
-  })
-
-  const priceListSwitched = computed(() =>
-    !!priceListCode.value && priceListCode.value !== defaults.value.priceListCode)
-
-  const resolvePrice = computed(() => makeStoredPriceResolver(items.value, priceOverrides.value, {
-    priceListCode: priceListCode.value,
-    issuedPriceListCode: defaults.value.priceListCode
-  }))
-
-  const invoice = computed(() => recalculateStoredInvoice({
-    record: record.value || {},
-    items: items.value,
-    discountType: discountType.value,
-    discountValue: discountValue.value,
-    priceListCode: priceListCode.value,
-    priceOverrides: priceOverrides.value,
-    calculateLineTax: makeLineTaxResolver({
-      priceListCode: priceListCode.value,
-      resolvePrice: resolvePrice.value
-    })
-  }))
-
   const currencyCode = computed(() => invoiceCurrencyOf(priceListCode.value))
   const money = (value) => _C(num(value), true, currencyCode.value)
 
-  const locked = computed(() => !!record.value && !canEditInvoice(record.value))
+  const lines = computed(() => {
+    void node.node.value
+    return pageState.getChildRows(ITEMS, NODE).map((row, at) => {
+      const sku = text(row.SKU)
+      const label = skuLabelOf(sku)
+      const price = num(row.Price)
+      const basePrice = num(row[INVOICE_LINE_BASE_PRICE])
+      return {
+        at,
+        sku,
+        qty: num(row.Qty),
+        price,
+        basePrice,
+        product: label.primary,
+        variant: label.secondary === sku ? sku : `${label.secondary} · ${sku}`,
+        changed: Math.abs(price - basePrice) >= 0.000001
+      }
+    })
+  })
 
-  // The submit needs the invoice's current tax-ledger rows to retire them; nothing else
-  // on this route fetches them.
-  const taxLedger = useRecord('TaxTransactions')
-  const loadSources = () => taxLedger.reload()
+  const setLinePrice = (at, value) => pageState.setChildren(ITEMS, at, 'Price', num(value), NODE)
+
+  const restoreLinePrice = (at) => {
+    const row = pageState.getChildren(ITEMS, at, null, NODE)
+    if (row) setLinePrice(at, row[INVOICE_LINE_BASE_PRICE])
+  }
+
+  const creditedReturns = computed(() => creditedReturnsOfInvoice(code.value).map((row) => {
+    const label = skuLabelOf(row.SKU)
+    return {
+      code: text(row.Code),
+      date: text(row.Date),
+      qty: num(row.Qty),
+      price: num(row.Price),
+      amount: num(row.Qty) * num(row.Price),
+      reason: text(row.Reason),
+      primary: label.primary,
+      secondary: label.secondary
+    }
+  }))
 
   return {
     pageState,
-    loadSources,
-    evaluate: (value) => evaluateProp(value, resourceRecord, resourceConfig),
+    resourceConfig,
     ui,
     money,
     skuLabelOf,
     record,
     code,
-    items,
-    invoice,
+    form,
+    live,
     locked,
-    priceListCode,
-    outletName,
-    priceListName,
-    priceListSwitched,
+    lines,
+    setLinePrice,
+    restoreLinePrice,
+    creditedReturns,
 
     dueDate,
+    priceListCode,
     discountType,
     discountValue,
     priceListOptions,
-    priceOverrides,
-    setLinePrice,
-    resetLinePrice,
+    priceListName,
+    priceListSwitched,
+    outletName,
+
+    taxBreakdown: computed(() => storedTaxBreakdown(form.value)),
+    netPayable: computed(() => grandTotalOf(form.value)),
+    issuedTotal: computed(() => grandTotalOf(record.value || {})),
+    discountPreTax: computed(() =>
+      invoicePolicyOf(form.value.PriceListCode).discountTaxPolicy === PRE_TAX),
 
     progressMeta: computed(() => progressMetaOf(record.value)),
     isPaid: computed(() => isPaid(record.value)),
@@ -175,4 +167,17 @@ export function useInvoiceEditContext () {
 
     goToView: () => nav.goTo('view', { code: code.value })
   }
+}
+
+// The route's ONE hydration point. The ledger derive retires the rows this invoice already
+// has, and `taxTransactionRowsOf` reads the cache — unloaded, the save writes a second set.
+export function useInvoiceEditSeed () {
+  const { pageState, record } = useInvoiceEditContext()
+  const ledger = useRecord('TaxTransactions')
+
+  onMounted(() => { ledger.reload() })
+
+  watch(ledger.items, () => {
+    if (record.value?.Code) syncInvoiceEdit(pageState, record.value)
+  })
 }

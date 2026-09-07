@@ -1,37 +1,42 @@
 <template>
-  <div :class="gutterClass">
+  <div v-if="live" :class="gutterClass">
     <SectionDividerLabel label="BILLED ITEMS" />
 
     <q-card flat bordered :class="ui.cardClass">
-      <!-- bg-transparent: the card owns the surface, else its corners show a border sliver. -->
-      <AqlList
-        :items="lines"
-        item-key="sku"
-        :layout="['label', 'caption', 'caption']"
-        :content="content"
-        :meta-layout="['chip']"
-        :chip="(row) => `${row.qty}`"
-        chip-color="primary"
-        :separator="true"
-        :item-bordered="false"
-        item-class="bg-transparent"
-        gutter="none"
-        empty-icon="receipt_long"
-        empty-text="No items on this invoice."
-      >
-        <template #btn="{ item }">
-          <div style="width: 104px">
-            <component
-              :is="CurrencyField"
-              :model-value="item.price"
-              :record="item"
-              :config="priceConfig"
-              header="Price"
-              @update:model-value="(value) => setLinePrice(item.sku, value)"
-            />
-          </div>
-        </template>
-      </AqlList>
+      <q-list separator>
+        <q-item v-for="line in lines" :key="line.sku">
+          <q-item-section :class="ui.flexWrapTextClass">
+            <q-item-label class="text-weight-medium">{{ line.qty }} x {{ line.product }}</q-item-label>
+            <q-item-label caption>{{ line.variant }}</q-item-label>
+            <q-item-label v-if="line.changed" caption class="text-orange-9">
+              was {{ money(line.basePrice) }}
+              <q-btn
+                flat dense no-caps
+                size="sm"
+                color="primary"
+                label="Restore"
+                class="q-ml-xs q-px-xs"
+                :disable="locked"
+                :aria-label="`Restore the original price for ${line.product}`"
+                @click="restoreLinePrice(line.at)"
+              />
+            </q-item-label>
+          </q-item-section>
+
+          <q-item-section side>
+            <div style="width: 104px">
+              <component
+                :is="CurrencyField"
+                :model-value="line.price"
+                :record="{}"
+                :config="priceConfig"
+                header="Price"
+                @update:model-value="(value) => setLinePrice(line.at, value)"
+              />
+            </div>
+          </q-item-section>
+        </q-item>
+      </q-list>
 
       <template v-if="lines.length">
         <q-separator />
@@ -48,10 +53,10 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, useAttrs } from 'vue'
-import { QItemLabel, QBtn } from 'quasar'
+// Quantity is a fact of the bill and stays locked. Only the unit price is editable, and it
+// is written straight onto the live child row.
+import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
-import AqlList from 'components/abstract/List.vue'
 import { resolveFieldComponent } from 'src/_fields/useFieldResolver'
 import { useInvoiceEditContext } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Edit/useInvoiceEditContext'
 
@@ -63,67 +68,11 @@ const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 const CurrencyField = resolveFieldComponent('currency', 'edit')
 
 const {
-  ui, money, skuLabelOf, items, invoice, locked, setLinePrice, resetLinePrice
+  ui, money, live, locked, lines, form, setLinePrice, restoreLinePrice
 } = useInvoiceEditContext()
 
-const text = (value) => (value == null ? '' : String(value).trim())
-const num = (value) => Number(value) || 0
-
-const lines = computed(() => {
-  const calculated = new Map(invoice.value.lines.map((line) => [text(line.SKU), line]))
-
-  return items.value.map((item) => {
-    const sku = text(item.SKU)
-    const label = skuLabelOf(sku)
-    const priced = calculated.get(sku) || {}
-    const price = num(priced.Price)
-    const issuedPrice = num(item.Price)
-
-    return {
-      sku,
-      qty: num(item.Qty),
-      product: label.primary,
-      variant: label.secondary === sku ? sku : `${label.secondary} · ${sku}`,
-      price,
-      issuedPrice,
-      changed: Math.abs(price - issuedPrice) >= 0.000001
-    }
-  })
-})
-
 const changedCount = computed(() => lines.value.filter((line) => line.changed).length)
-const subtotal = computed(() => invoice.value.header.Subtotal)
-
-// A component, not a resolver: a resolver returning null still gets a wrapper element.
-const RepricedNote = defineComponent({
-  name: 'InvoiceItemRepricedNote',
-  props: { item: { type: Object, required: true } },
-  setup: (props) => () => {
-    const row = props.item
-    if (!row.changed) return null
-    return h(QItemLabel, { caption: true, class: 'text-orange-9' }, () => [
-      `was ${money(row.issuedPrice)} `,
-      h(QBtn, {
-        flat: true,
-        dense: true,
-        noCaps: true,
-        size: 'sm',
-        color: 'primary',
-        label: 'Restore',
-        class: 'q-ml-xs q-px-xs',
-        disable: locked.value,
-        'aria-label': `Restore the original price for ${row.product}`,
-        onClick: () => resetLinePrice(row.sku)
-      })
-    ])
-  }
-})
-
-const content = [
-  (row) => row.product,
-  (row) => row.variant,
-  RepricedNote
-]
+const subtotal = computed(() => Number(form.value.Subtotal) || 0)
 
 // Memoised: a fresh literal per render re-runs the control's watchers on every keystroke.
 const priceConfig = computed(() => ({

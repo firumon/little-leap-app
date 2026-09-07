@@ -1,32 +1,14 @@
-import {
-  buildInvoiceUpdateNodes,
-  editableInvoiceItems,
-  makeStoredPriceResolver
-} from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoicePayload'
-import { makeLineTaxResolver } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceCalculation'
-import { canEditInvoice } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceWorkflow'
-import { taxTransactionRowsOf } from 'src/_resource/Accounts/TaxTransactions/composables/useTaxTransactionPayload'
+// The live nodes ARE the batch, so this bar only checks the invariants and lets the
+// framework send what is already standing in pageState (UI_PAGE_STATE_NODES.md §5.7D).
+import { invoiceEditBlock } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceDraft'
 
-const NODE = 'InvoiceEdit'
+const NODE = 'OutletConsumptionInvoices'
 
-const text = (value) => (value == null ? '' : String(value).trim())
-
-export default (props, { pageState, resourceConfig, resourceRecord }) => {
+export default (props, { pageState, resourceRecord }) => {
   // The sticky bar mounts against the page's node and renders nothing without one.
-  pageState.useNode('OutletConsumptionInvoices')
+  pageState.useNode(NODE)
 
   const record = () => resourceRecord?.record?.value || {}
-
-  // Same EditFor guard as the context: stale answers must not reach another invoice.
-  const field = (header) => {
-    if (text(pageState.getControls('EditFor', null, NODE)) !== text(record().Code)) return undefined
-    return pageState.getControls(header, null, NODE)
-  }
-
-  const overrides = () => {
-    const value = field('PriceOverrides')
-    return value && typeof value === 'object' ? value : {}
-  }
 
   return {
     actions: ['cancel', 'submit'],
@@ -39,46 +21,11 @@ export default (props, { pageState, resourceConfig, resourceRecord }) => {
     },
 
     submit: () => {
-      const row = record()
-      if (!text(row.Code)) return { valid: false, message: 'This invoice could not be loaded.' }
-
-      if (!canEditInvoice(row)) {
-        return { valid: false, message: 'This invoice can no longer be edited — it has taken a payment or come to rest.' }
-      }
-
-      const items = editableInvoiceItems(row)
-      const priceOverrides = overrides()
-      const issuedPriceListCode = text(row.PriceListCode)
-      const priceListCode = text(field('PriceListCode')) || issuedPriceListCode
-
-      const result = buildInvoiceUpdateNodes({
-        record: row,
-        items,
-        dueDate: field('DueDate'),
-        discountType: field('DiscountType'),
-        discountValue: field('DiscountValue'),
-        priceListCode,
-        priceOverrides,
-        // Current ledger rows, so Layer 2 can retire them in the same batch.
-        taxTransactionRows: taxTransactionRowsOf('OutletConsumptionInvoices', text(row.Code)),
-        calculateLineTax: makeLineTaxResolver({
-          priceListCode,
-          resolvePrice: makeStoredPriceResolver(items, priceOverrides, {
-            priceListCode,
-            issuedPriceListCode
-          })
-        })
-      })
-
-
-      const applied = pageState.applyNodes(result)
-      if (applied.valid === false) return false
-
-      return { successMsg: applied.successMsg }
+      const refused = invoiceEditBlock(pageState, record())
+      if (refused) return { valid: false, message: refused }
+      return { successMsg: 'Invoice updated.' }
     },
 
-    // Never return an `onSuccess` with the requests: that would replace PageAction.vue's
-    // default, which owns both the form reset and this navigation.
     successRoute: 'view'
   }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div :class="gutterClass">
+  <div v-if="live" :class="gutterClass">
     <SectionDividerLabel label="BILLING SUMMARY" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -18,7 +18,7 @@
 
       <q-card-section class="row items-center justify-between q-py-sm">
         <div class="text-subtitle2 text-weight-bold">Net Payable</div>
-        <div class="text-h6 text-weight-bolder text-primary">{{ money(grandTotal) }}</div>
+        <div class="text-h6 text-weight-bolder text-primary">{{ money(netPayable) }}</div>
       </q-card-section>
 
       <template v-if="moved">
@@ -50,47 +50,46 @@
 </template>
 
 <script setup>
+// Every figure is read straight off the live node, which Layer 2 re-prices on each answer,
+// so the screen and the batch cannot disagree.
 import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
-import { netPayableOf } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceCalculation'
 import { useInvoiceEditContext } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Edit/useInvoiceEditContext'
 
-defineOptions({ name: 'OutletConsumptionInvoicesEditBillingSummary', inheritAttrs: false })
+defineOptions({ name: 'OutletConsumptionInvoicesEditInvoiceSummary', inheritAttrs: false })
 
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
-const { ui, money, record, invoice } = useInvoiceEditContext()
+const {
+  ui, money, live, form, taxBreakdown, netPayable, issuedTotal, discountPreTax
+} = useInvoiceEditContext()
 
-const header = computed(() => invoice.value.header)
-const taxBreakdown = computed(() => invoice.value.taxBreakdown)
+const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
 
-const grandTotal = computed(() => header.value.Total)
-const issuedTotal = computed(() => netPayableOf(record.value || {}))
-
-const delta = computed(() => grandTotal.value - issuedTotal.value)
-
+const delta = computed(() => netPayable.value - issuedTotal.value)
 const moved = computed(() => Math.abs(delta.value) >= 0.005)
 
 const summary = computed(() => {
-  const entry = header.value
-  const preTax = invoice.value.policy.discountTaxPolicy === 'PRE_TAX'
+  const entry = form.value
 
   return [
-    { key: 'subtotal', label: 'Subtotal', value: entry.Subtotal },
+    { key: 'subtotal', label: 'Subtotal', value: num(entry.Subtotal) },
     {
+      // Under PRE_TAX the discount is already inside each line's taxable amount, so the
+      // label says where it went rather than implying a second deduction.
       key: 'discount',
-      label: preTax ? 'Discount (applied to line items)' : 'Discount',
-      value: entry.Discount,
-      negative: entry.Discount > 0
+      label: discountPreTax.value ? 'Discount (applied to line items)' : 'Discount',
+      value: num(entry.Discount),
+      negative: num(entry.Discount) > 0
     },
-    { key: 'taxable', label: 'Taxable Amount', value: entry.TotalTaxableAmount },
-    { key: 'tax', label: 'Tax Amount', value: entry.TotalTaxAmount },
+    { key: 'taxable', label: 'Taxable Amount', value: num(entry.TotalTaxableAmount) },
+    { key: 'tax', label: 'Tax Amount', value: num(entry.TotalTaxAmount) },
     {
       key: 'returns',
       label: 'Returns Credited',
-      value: entry.ReturnDeductionTotal,
-      negative: entry.ReturnDeductionTotal > 0
+      value: num(entry.ReturnDeductionTotal),
+      negative: num(entry.ReturnDeductionTotal) > 0
     }
   ]
 })

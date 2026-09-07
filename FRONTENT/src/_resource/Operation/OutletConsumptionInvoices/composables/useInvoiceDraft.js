@@ -1,21 +1,31 @@
-// The live Add draft for OutletConsumptionInvoices. Layer 2. The wizard's nodes ARE the
-// batch: the UI writes one column, the derives here regenerate every consequence, and
-// submit only validates (UI_PAGE_STATE_NODES.md §5.7A–§5.7D).
+// The live drafts for OutletConsumptionInvoices — Add and Edit. Layer 2. The page's nodes
+// ARE the batch: the UI writes one column, the derives here regenerate every consequence,
+// and submit only validates (UI_PAGE_STATE_NODES.md §5.7A–§5.7D).
 
 import { useAuth } from 'src/composables/core/useAuth'
+import { useDataStore } from 'src/stores/data'
 import { useInvoiceIndex } from './useInvoiceIndex'
 import {
   resolvePriceListCode,
   invoiceDueDaysFor,
-  dueDateFrom
+  dueDateFrom,
+  storedTaxBreakdown
 } from './useInvoiceCalculation'
 import {
   invoiceNode,
   repriceInvoiceInPageState,
   buildInvoiceGenerationNodes,
-  makeInvoiceLinePriceResolver
+  makeInvoiceLinePriceResolver,
+  editableInvoiceItems,
+  invoiceEditDefaults
 } from './useInvoicePayload'
+import { canEditInvoice } from './useInvoiceWorkflow'
 import { makeLineTaxResolver } from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionInvoice'
+import { priceOf } from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionStock'
+import {
+  taxTransactionRowsOf,
+  buildTaxTransactionReplacementNodes
+} from 'src/_resource/Accounts/TaxTransactions/composables/useTaxTransactionPayload'
 
 const INVOICES = 'OutletConsumptionInvoices'
 const INVOICE_ITEMS = 'OutletConsumptionInvoiceItems'
@@ -35,6 +45,7 @@ const CTL = INVOICE_CONTROL
 
 const text = (value) => (value == null ? '' : String(value).trim())
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
+const asRow = (value) => (value && typeof value === 'object' ? value : {})
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const csv = (value) => text(value).split(',').map(text).filter(Boolean)
 const isActiveRow = (row) => text(row?.Status || 'Active').toUpperCase() === 'ACTIVE'
@@ -289,6 +300,154 @@ export function invoiceDraftBlock (pageState) {
 
 export const invoiceDraftLines = billedLines
 
+// ─── The live EDIT draft ─────────────────────────────────────────────────────
+
+// The price the line opened at. Frontend-only, so `build()` strips it before the wire.
+export const INVOICE_LINE_BASE_PRICE = '_basePrice'
+
+/** The returns this issued invoice already credited. The Edit page only lists them. */
+export function creditedReturnsOfInvoice (invoiceCode) {
+  const code = text(invoiceCode)
+  if (!code) return []
+  return (useDataStore().getRecords(RETURNS) || [])
+    .map(asRow)
+    .filter((row) => text(row.ConsumptionInvoiceCode) === code && isActiveRow(row))
+}
+
+function editLineRow (item) {
+  const row = asRow(item)
+  const price = num(row.Price)
+  return {
+    _action: 'update',
+    [INVOICE_LINE_BASE_PRICE]: price,
+    Code: text(row.Code),
+    SKU: text(row.SKU),
+    Qty: num(row.Qty),
+    Price: price,
+    Total: num(row.Total),
+    Discount: num(row.Discount),
+    TaxableAmount: num(row.TaxableAmount),
+    TaxAmount: num(row.TaxAmount),
+    TaxCode: text(row.TaxCode)
+  }
+}
+
+// Rebuilt from scratch each pass: an edit can change the SET of tax codes, so there is no
+// ledger row to match against.
+function syncInvoiceEditLedger (pageState, stored) {
+  const row = asRow(stored)
+  const code = text(row.Code)
+  pageState.removeNode(TAX_TRANSACTIONS)
+  if (!code) return
+
+  pageState.applyNodes(buildTaxTransactionReplacementNodes({
+    existingRows: taxTransactionRowsOf(INVOICES, code),
+    resource: INVOICES,
+    resourceCode: code,
+    date: text(row.Date),
+    counterPartyType: 'Outlet',
+    counterPartyCode: text(row.OutletCode),
+    taxBreakdown: storedTaxBreakdown(record(pageState))
+  }))
+}
+
+/** The whole edit, re-cut: every line re-priced, every total restated, ledger re-raised. */
+export function syncInvoiceEdit (pageState, stored) {
+  if (!pageState.hasNode(INVOICES)) return
+  repriceInvoiceInPageState(pageState)
+  syncInvoiceEditLedger(pageState, stored)
+}
+
+// A different list re-prices every line, and that new price becomes the baseline the "was"
+// caption and Restore measure against.
+export function applyInvoiceEditPriceList (value, pageState, previous) {
+  if (previous === undefined || text(previous) === text(value)) return
+  const list = text(value)
+  lineRows(pageState).forEach((row, index) => {
+    const listed = priceOf(row.SKU, list)
+    const price = listed === null || listed === undefined ? num(row.Price) : num(listed)
+    pageState.setChildren(INVOICE_ITEMS, index, null,
+      { Price: price, [INVOICE_LINE_BASE_PRICE]: price }, INVOICES)
+  })
+}
+
+// The invoice as ONE live update node, lines as children. Stored totals are not seeded:
+// the lines derive re-prices the whole bill on the first tick.
+export function buildInvoiceEditInitNodes (stored = {}) {
+  const row = asRow(stored)
+  const code = text(row.Code)
+  if (!code || !canEditInvoice(row)) return []
+
+  const items = editableInvoiceItems(row)
+  if (!items.length) return []
+
+  const defaults = invoiceEditDefaults(row)
+
+  return [{
+    resource: INVOICES,
+    code,
+    record: {
+      DueDate: defaults.dueDate,
+      PriceListCode: defaults.priceListCode,
+      ReturnDeductionTotal: num(row.ReturnDeductionTotal)
+    },
+    children: [{ resource: INVOICE_ITEMS, records: items.map(editLineRow) }],
+    controls: {
+      [CTL.DISCOUNT_TYPE]: defaults.discountType,
+      [CTL.DISCOUNT_VALUE]: defaults.discountValue
+    },
+    permissions: { update: 'You are not allowed to edit this invoice.' },
+    successMsg: 'Invoice updated.'
+  }]
+}
+
+// Every consequence the Edit page has. Only the lines entry is `immediate` — that is the
+// zero-trust recalc at mount; the rest would re-price a historical bill on their own.
+export function invoiceEditDerivations (stored = {}) {
+  const row = asRow(stored)
+  const sync = (value, api) => syncInvoiceEdit(api, row)
+
+  return [
+    { key: 'invoiceEdit:lines', on: { resource: INVOICES, children: INVOICE_ITEMS }, handler: sync },
+    {
+      key: 'invoiceEdit:priceList',
+      on: { resource: INVOICES, record: 'PriceListCode' },
+      immediate: false,
+      handler: (value, api, previous) => {
+        applyInvoiceEditPriceList(value, api, previous)
+        syncInvoiceEdit(api, row)
+      }
+    },
+    { key: 'invoiceEdit:dueDate', on: { resource: INVOICES, record: 'DueDate' }, immediate: false, handler: sync },
+    { key: 'invoiceEdit:discountType', on: { resource: INVOICES, control: CTL.DISCOUNT_TYPE }, immediate: false, handler: sync },
+    { key: 'invoiceEdit:discountValue', on: { resource: INVOICES, control: CTL.DISCOUNT_VALUE }, immediate: false, handler: sync }
+  ]
+}
+
+/** Why the edit cannot be saved, or '' when it can. It builds nothing. */
+export function invoiceEditBlock (pageState, stored = {}) {
+  const row = asRow(stored)
+  if (!text(row.Code)) return 'This invoice could not be loaded.'
+  if (!canEditInvoice(row)) {
+    return 'This invoice can no longer be edited — it has taken a payment or come to rest.'
+  }
+
+  const lines = lineRows(pageState)
+  if (!lines.length) return 'This invoice has no items to price.'
+  if (lines.some((line) => num(line.Price) < 0)) return 'A unit price cannot be negative.'
+
+  const form = record(pageState)
+  if (!text(form.DueDate)) return 'Set a due date for this invoice.'
+  if (!text(form.PriceListCode)) return 'Choose a price list for this invoice.'
+
+  const type = text(getCtl(pageState, CTL.DISCOUNT_TYPE, 'FLAT')) || 'FLAT'
+  const value = num(getCtl(pageState, CTL.DISCOUNT_VALUE, 0))
+  if (value < 0) return 'A discount cannot be negative.'
+  if (type === 'PERCENT' && value > 100) return 'A percentage discount cannot be more than 100.'
+
+  return ''
+}
+
 // Composable shape for setup-context callers. Same functions, one import (§5).
 export function useInvoiceDraft () {
   return {
@@ -302,6 +461,11 @@ export function useInvoiceDraft () {
     applyInvoiceOutlet,
     invoiceableConsumptionsOf,
     creditableReturnsOf,
-    creditedReturnRows
+    creditedReturnRows,
+    creditedReturnsOfInvoice,
+    buildInvoiceEditInitNodes,
+    invoiceEditDerivations,
+    invoiceEditBlock,
+    syncInvoiceEdit
   }
 }
