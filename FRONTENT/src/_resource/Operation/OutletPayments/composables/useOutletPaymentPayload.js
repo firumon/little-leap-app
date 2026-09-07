@@ -279,14 +279,6 @@ export function buildOutletPaymentCancellationNodes ({
 
 // ─── Composable Wrapper ───────────────────────────────────────────────────────
 
-export function useOutletPaymentPayload () {
-  return {
-    stampFields,
-    PAYMENT_RECORDED_MESSAGE,
-    buildOutletPaymentCreationNodes,
-    buildOutletPaymentCancellationNodes,
-    cancellationCommentError
-  }
-}
+
 
 export { stampFields }

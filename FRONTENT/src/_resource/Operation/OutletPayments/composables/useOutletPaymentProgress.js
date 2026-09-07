@@ -62,18 +62,4 @@ export function canCancelPayment (record) {
 
 // ─── Composable Wrapper ───────────────────────────────────────────────────────
 
-export function useOutletPaymentProgress () {
-  return {
-    SUBMITTED,
-    CANCELLED,
-    PROGRESS_META,
-    OPEN_STATES,
-    TERMINAL_STATES,
-    progressOf,
-    progressMetaOf,
-    isSubmitted,
-    isCancelled,
-    canCreatePayment,
-    canCancelPayment
-  }
-}
+

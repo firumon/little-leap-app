@@ -1,13 +1,11 @@
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { useRecord } from 'src/composables/resources/useRecord'
-import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
-import { useCurrencyResource } from 'src/_resource/Master/Currencies/composables/useCurrencyResource'
 import { useOutletPaymentIndex } from 'src/_resource/Operation/OutletPayments/composables/useOutletPaymentIndex'
 
 /**
  * OutletPayments › Index — the Core-composable relay for the Index page
- * (UI_RESOURCE_DOMAIN_LOGIC.md §6.1). Lists may not import `useResourceNav` or
- * `useCurrencyResource` themselves, so those imports live here.
+ * (UI_RESOURCE_DOMAIN_LOGIC.md §6.1). Lists may not import `useResourceNav`
+ * themselves, so that import lives here.
  */
 
 const text = (value) => (value == null ? '' : String(value).trim())
@@ -17,8 +15,6 @@ let pending = null
 
 export function useOutletPaymentIndexContext () {
   const nav = useResourceNav()
-  const ui = useAQLConfig()
-  const { _C } = useCurrencyResource()
 
   const index = useOutletPaymentIndex()
 
@@ -34,15 +30,8 @@ export function useOutletPaymentIndexContext () {
 
   return {
     loadSources,
-    ui,
     nav,
-    money: (value) => _C(Number(value) || 0, true),
-
-    overdueMetrics: index.overdueMetrics,
-    todayCollectionsMetrics: index.todayCollectionsMetrics,
-    linearProgressData: index.linearProgressData,
     views: index.views,
-    openInvoices: index.openInvoices,
 
     /** Open one payment receipt. */
     openPayment: (code) => {

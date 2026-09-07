@@ -107,18 +107,4 @@ export function waiverCommentOf (totalPaid, pendingTotal, invoiceCount, reason) 
 
 export { grandTotalOf, countsAsPayment, paidTotalOf, balanceDueOf, invoiceCurrencyOf }
 
-export function useOutletPaymentAllocation () {
-  return {
-    netInvoiceTotalOf,
-    grandTotalOf,
-    countsAsPayment,
-    paidTotalOf,
-    balanceDueOf,
-    indexPaymentsByInvoice,
-    autoDistribute,
-    invoiceCurrencyOf,
-    residualThreshold,
-    isWaiverEligible,
-    waiverCommentOf
-  }
-}
+

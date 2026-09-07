@@ -56,32 +56,6 @@ const shared = defineSharedComposable((dataStore) => {
     return map
   })
 
-  // Outlet Code -> Array of active Invoices Map
-  const invoicesByOutlet = computed(() => {
-    const map = new Map()
-    rawInvoices.value.forEach(inv => {
-      const outCode = text(inv.OutletCode)
-      if (!outCode) return
-      const bucket = map.get(outCode)
-      if (bucket) bucket.push(inv)
-      else map.set(outCode, [inv])
-    })
-    return map
-  })
-
-  // Outlet Code -> Array of Payments Map
-  const paymentsByOutlet = computed(() => {
-    const map = new Map()
-    rawPayments.value.forEach(p => {
-      const outCode = text(p.OutletCode)
-      if (!outCode) return
-      const bucket = map.get(outCode)
-      if (bucket) bucket.push(p)
-      else map.set(outCode, [p])
-    })
-    return map
-  })
-
   // ── Unified Invoices Projection ─────────────────────────────────────────────
   const invoiceRows = computed(() => {
     const names = outletNameByCode.value
@@ -265,8 +239,6 @@ const shared = defineSharedComposable((dataStore) => {
     rawOutlets,
     outletNameByCode,
     paymentsByInvoice,
-    invoicesByOutlet,
-    paymentsByOutlet,
     invoiceRows,
     invoiceByCode,
     invoiceRowByCode,

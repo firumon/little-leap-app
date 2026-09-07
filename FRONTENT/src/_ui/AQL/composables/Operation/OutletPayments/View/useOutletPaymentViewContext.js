@@ -1,4 +1,4 @@
-import { ref, computed, inject } from 'vue'
+import { computed, inject } from 'vue'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import { useRouteConfig } from 'src/composables/resources/useRouteConfig'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
@@ -67,8 +67,6 @@ export function useOutletPaymentViewContext () {
   if (!pending) {
     pending = loadSources().finally(() => { pending = null })
   }
-
-  const saving = ref(false)
 
   const loading = computed(() => resourceRecord?.loading?.value ?? false)
 
@@ -141,7 +139,6 @@ export function useOutletPaymentViewContext () {
   return {
     ui,
     loading,
-    saving,
 
     /** Evaluate a prop that may be a function of the record, exactly as a Section does. */
     evaluate: (value) => (typeof value === 'function'
