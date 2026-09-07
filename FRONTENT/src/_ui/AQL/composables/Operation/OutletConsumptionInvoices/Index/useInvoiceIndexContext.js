@@ -1,6 +1,5 @@
 import { computed } from 'vue'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
-import { useAdditionalActions } from 'src/composables/resources/useAdditionalActions'
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import { useCurrencyResource } from 'src/_resource/Master/Currencies/composables/useCurrencyResource'
@@ -37,7 +36,6 @@ export function useInvoiceIndexContext () {
   const { _C } = useCurrencyResource()
 
   const index = useInvoiceIndex()
-  const { runAction } = useAdditionalActions('OutletConsumptionInvoices')
 
   /**
    * The resources this page reads BESIDES its own.
@@ -76,19 +74,9 @@ export function useInvoiceIndexContext () {
 
     outletPendings: index.outletPendings,
     invoiceableOutlets: index.invoiceableOutlets,
-    runtimeViews: index.runtimeViews,
     storedViews: index.storedViews,
-    dueSplit: index.dueSplit,
-    collections: index.collections,
-    todayInvoicing: index.todayInvoicing,
-    pendingInvoiceGeneration: index.pendingInvoiceGeneration,
 
     canCreate: computed(() => canCreateInvoice()),
-
-    // Routed through `runAction`, not a local dialog: the action's gate and its permission
-    // live in the GAS config, and a hand-rolled dialog would be a second, ungated path
-    // (UI_ACTION_SYSTEM.md §7).
-    settleInvoice: (record) => runAction('SettleInvoice', record),
 
     /** Open one invoice. */
     openInvoice: (code) => {

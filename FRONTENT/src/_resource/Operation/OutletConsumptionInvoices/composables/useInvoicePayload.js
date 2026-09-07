@@ -16,7 +16,6 @@ import { useOutletOperatingRulesResource } from 'src/_resource/Master/OutletOper
 import {
   TAX_TRANSACTION_RESOURCES,
   buildTaxTransactionNodes,
-  buildTaxTransactionReplacementNodes,
   buildTaxTransactionReversalNodes
 } from 'src/_resource/Accounts/TaxTransactions/composables/useTaxTransactionPayload'
 import {
@@ -28,12 +27,11 @@ import {
   validateInvoiceDraft,
   settlementGate,
   transitionForBalance,
-  progressOf,
   PENDING_PAYMENT,
   PAID,
   CANCELLED
 } from './useInvoiceWorkflow'
-import { nodePayloadForParent, changedInvoiceItemRows } from 'src/_resource/Operation/OutletConsumptionInvoiceItems/composables/useInvoiceItemPayload'
+import { nodePayloadForParent } from 'src/_resource/Operation/OutletConsumptionInvoiceItems/composables/useInvoiceItemPayload'
 const INVOICES = 'OutletConsumptionInvoices'
 const INVOICE_ITEMS = 'OutletConsumptionInvoiceItems'
 const CONSUMPTIONS = 'OutletConsumptions'
@@ -554,162 +552,6 @@ export function invoiceEditDefaults (record = {}) {
   }
 }
 
-// Override, then the chosen price list, then the stored price. The list is read only when
-// it CHANGED - an invoice is historical and must not re-price on its own.
-export function makeStoredPriceResolver (items = [], overrides = {}, { priceListCode = '', issuedPriceListCode = '' } = {}) {
-  const stored = new Map((Array.isArray(items) ? items : [])
-    .map(asRow)
-    .map((item) => [text(item.SKU), num(item.Price)]))
-  const typed = overrides && typeof overrides === 'object' ? overrides : {}
-
-  const chosen = text(priceListCode)
-  const switched = !!chosen && chosen !== text(issuedPriceListCode)
-
-  return (sku) => {
-    const key = text(sku)
-    const override = typed[key]
-    if (override !== undefined && override !== null && override !== '') return num(override)
-
-    const fallback = stored.has(key) ? stored.get(key) : 0
-    if (!switched) return fallback
-
-    const listed = priceOf(key, chosen)
-    return listed === null || listed === undefined ? fallback : num(listed)
-  }
-}
-
-/** One engine call, shared by the Edit summary card and the builder below. */
-export function recalculateStoredInvoice ({
-  record = {},
-  items = [],
-  discountType = 'FLAT',
-  discountValue = 0,
-  priceListCode = '',
-  priceOverrides = {},
-  calculateLineTax = null
-} = {}) {
-  const row = asRow(record)
-  const issued = text(row.PriceListCode)
-  // Blank means unchanged, not "no list".
-  const chosen = text(priceListCode) || issued
-  const resolvePrice = makeStoredPriceResolver(items, priceOverrides, {
-    priceListCode: chosen,
-    issuedPriceListCode: issued
-  })
-
-  return calculateConsumptionInvoice({
-    lines: (Array.isArray(items) ? items : []).map(asRow).map((item) => ({ SKU: item.SKU, Qty: item.Qty })),
-    priceListCode: chosen,
-    discountType,
-    discountValue,
-    // Returns are not editable here; carried through so the payable still nets them off.
-    returnDeduction: num(row.ReturnDeductionTotal),
-    resolvePrice,
-    // Built from THIS resolver when the caller gives none. A tax resolver without the
-    // price taxes every line on zero, so it is not left to each caller to remember.
-    calculateLineTax: calculateLineTax || makeLineTaxResolver({ priceListCode: chosen, resolvePrice })
-  })
-}
-
-
-const sameMoney = (a, b) => Math.abs(num(a) - num(b)) < 0.000001
-
-// One batch: the header totals plus an update per line whose figures moved. Unchanged
-// lines are dropped so a one-price fix does not write dozens of audit rows.
-export function buildInvoiceUpdateNodes ({
-  record = {},
-  items = null,
-  dueDate = undefined,
-  discountType = undefined,
-  discountValue = undefined,
-  priceListCode = undefined,
-  priceOverrides = {},
-  calculateLineTax = null,
-  // Passed in, not looked up: builders stay store-free. Omitted, the ledger is untouched.
-  taxTransactionRows = null
-} = {}) {
-  const row = asRow(record)
-  const code = text(row.Code)
-  if (!code) return [{ valid: false, message: 'The invoice could not be identified.' }]
-
-  if (progressOf(row) !== PENDING_PAYMENT) {
-    return [{ valid: false, message: 'This invoice can no longer be edited — it has been paid, part-paid or cancelled.' }]
-  }
-
-  const lines = Array.isArray(items) ? items.map(asRow) : editableInvoiceItems(row)
-  if (!lines.length) return [{ valid: false, message: 'This invoice has no items to price.' }]
-
-  const defaults = invoiceEditDefaults(row)
-  const terms = {
-    dueDate: text(dueDate) || defaults.dueDate,
-    discountType: text(discountType) || defaults.discountType,
-    discountValue: discountValue === undefined || discountValue === null || discountValue === ''
-      ? defaults.discountValue
-      : num(discountValue),
-    priceListCode: text(priceListCode) || defaults.priceListCode
-  }
-
-  if (!terms.dueDate) return [{ valid: false, message: 'Set a due date for this invoice.' }]
-  if (!terms.priceListCode) return [{ valid: false, message: 'Choose a price list for this invoice.' }]
-  if (terms.discountValue < 0) return [{ valid: false, message: 'A discount cannot be negative.' }]
-  if (terms.discountType === 'PERCENT' && terms.discountValue > 100) {
-    return [{ valid: false, message: 'A percentage discount cannot be more than 100.' }]
-  }
-
-  const priceFor = makeStoredPriceResolver(lines, priceOverrides, {
-    priceListCode: terms.priceListCode,
-    issuedPriceListCode: defaults.priceListCode
-  })
-  if (lines.some((item) => priceFor(item.SKU) < 0)) {
-    return [{ valid: false, message: 'A unit price cannot be negative.' }]
-  }
-
-  const invoice = recalculateStoredInvoice({
-    record: row,
-    items: lines,
-    discountType: terms.discountType,
-    discountValue: terms.discountValue,
-    priceListCode: terms.priceListCode,
-    priceOverrides,
-    calculateLineTax
-  })
-
-  // Neither is written: `Total` is derived by readers, and returns are not editable here.
-  const { Total, ReturnDeductionTotal, ...storedTotals } = invoice.header
-
-  // No progress stamp is rewritten: those columns say why the invoice was RAISED, and the
-  // resource's audit columns already record who edited it.
-  const nodes = [{ resource: INVOICES, code: textOrRef(code), record: {
-    DueDate: terms.dueDate,
-    PriceListCode: terms.priceListCode,
-    ...storedTotals
-  }, reload: [INVOICES] }]
-
-  const ledger = Array.isArray(taxTransactionRows)
-    ? buildTaxTransactionReplacementNodes({
-      existingRows: taxTransactionRows,
-      resource: INVOICES,
-      resourceCode: code,
-      date: text(row.Date),
-      counterPartyType: 'Outlet',
-      counterPartyCode: text(row.OutletCode),
-      taxBreakdown: invoice.taxBreakdown
-    })
-    : []
-
-  nodes.push(...ledger)
-
-  // Which rows actually moved is the ITEM resource's own question.
-  const itemRecords = changedInvoiceItemRows(lines, invoice.lines, sameMoney)
-  if (itemRecords.length) {
-    nodes.push({ resource: INVOICE_ITEMS, many: true, records: itemRecords, reload: [INVOICE_ITEMS], permissions: { update: 'You are not allowed to update invoice items.' } })
-  }
-
-  nodes[0].permissions = { update: 'You are not allowed to edit this invoice.' }
-  nodes[0].successMsg = 'Invoice updated.'
-  return nodes
-}
-
 // Composable shape for setup-context callers. Same functions, one import (§5).
 export function useInvoicePayload () {
   return {
@@ -721,12 +563,9 @@ export function useInvoicePayload () {
     buildInvoiceBalanceTransitionNodes,
     buildSettlementNodes,
     buildCancellationNodes,
-    buildInvoiceUpdateNodes,
     invoiceCompositionDerive,
     repriceInvoiceInPageState,
     makeInvoiceLinePriceResolver,
-    recalculateStoredInvoice,
-    makeStoredPriceResolver,
     editableInvoiceItems,
     invoiceEditDefaults
   }

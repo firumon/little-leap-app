@@ -18,6 +18,7 @@ import {
 import { buildCancellationNodes } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoicePayload'
 import { consumptionCodesOf } from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionProgress'
 import { taxTransactionRowsOf } from 'src/_resource/Accounts/TaxTransactions/composables/useTaxTransactionPayload'
+import { elapsedLabel } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Index/useInvoiceRowPresets'
 
 // OutletConsumptionInvoices > Cancel - the one inject() behind the three cards, and the
 // route's own hydration point. `CANCEL_COMMENT` is working state: the builder stamps it
@@ -33,20 +34,7 @@ const SOURCES = [
 const text = (value) => (value == null ? '' : String(value).trim())
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
 
-const HOUR = 3600000
-const DAY = 86400000
-
-/** How long ago, in the words the cancel cards use. A bare date reads as midnight. */
-export function elapsedLabel (value) {
-  const at = new Date(text(value).length <= 10 ? `${text(value)}T00:00:00` : text(value))
-  if (Number.isNaN(at.getTime())) return ''
-  const gap = Math.max(0, Date.now() - at.getTime())
-  if (gap < HOUR) return 'Just Now'
-  if (gap < DAY) return `${Math.floor(gap / HOUR)} hours ago`
-  const days = Math.floor(gap / DAY)
-  if (days <= 99) return `${days} days ago`
-  return `${Math.floor(days / 30)} months ago`
-}
+export { elapsedLabel }
 
 export function useInvoiceCancelContext () {
   const pageState = inject('pageState', null)

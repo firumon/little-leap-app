@@ -73,10 +73,6 @@ import { useInvoiceViewContext } from 'src/_ui/AQL/composables/Operation/OutletC
 
 defineOptions({ name: 'OutletConsumptionInvoicesViewInvoiceHeader', inheritAttrs: false })
 
-const props = defineProps({
-  title: { type: [String, Function], default: 'Invoice' }
-})
-
 const {
   ui, record, row, outletName, progressMeta,
   balance, collected, payableText, money, isCancelled, isPaid

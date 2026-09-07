@@ -61,14 +61,8 @@ const rows = computed(() => items.value.map((item) => {
   const sku = String(item.SKU || '').trim()
   const label = skuLabelOf(sku)
   const qty = num(item.Qty)
-  const discount = num(item.Discount)
 
-  // Assembled from whichever parts are non-zero — a caption reading
-  // "Taxable: 0 | Tax: 0 | Disc: -0" on an untaxed line is noise, not detail.
   const parts = [`${qty} × ${money(num(item.Price))}`]
-  // if (num(item.TaxableAmount)) parts.push(`Taxable ${money(item.TaxableAmount)}`)
-  // if (num(item.TaxAmount)) parts.push(`Tax ${money(item.TaxAmount)}`)
-  // if (discount) parts.push(`Disc −${money(discount)}`)
 
   return {
     key: item.Code || `${sku}-${qty}`,
@@ -92,5 +86,4 @@ const content = [
 ]
 
 const lineTotal = (item) => money(item.total)
-const lineTax = (item) => (item.tax > 0 ? `incl. tax ${money(item.tax)}` : '')
 </script>

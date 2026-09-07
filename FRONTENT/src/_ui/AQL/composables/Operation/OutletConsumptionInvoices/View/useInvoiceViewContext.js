@@ -16,9 +16,6 @@ import {
 import {
   progressMetaOf,
   settlementOf,
-  canRecordPayment,
-  canMarkPaid,
-  canCancelInvoice,
   isPaid,
   isCancelled
 } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceWorkflow'
@@ -118,7 +115,6 @@ export function useInvoiceViewContext () {
     // What the audited settlement discharged — the third term that makes
     // received + settled + remaining add up to the payable.
     settledOff: computed(() => settledOffOf(record.value || {})),
-    grandTotal: computed(() => row.value?.total ?? 0),
 
     payableText: computed(() => payableLabel(payableFiguresOf(record.value || {}), money)),
     payments: computed(() => row.value?.payments || []),
@@ -128,30 +124,14 @@ export function useInvoiceViewContext () {
     policy: computed(() => invoicePolicyOf(record.value?.PriceListCode)),
     settlement: computed(() => settlementOf(record.value || {})),
 
-    canPay: computed(() => canRecordPayment(record.value)),
-    canSettle: computed(() => canMarkPaid(record.value)),
-    canCancel: computed(() => canCancelInvoice(record.value)),
     isPaid: computed(() => isPaid(record.value)),
     isCancelled: computed(() => isCancelled(record.value)),
 
-    /**
-     * `Make Payment` — the one navigation this page performs that a GAS `navigate` action
-     * could not express: it carries a QUERY (`invoiceCode`, `outletCode`) so the payments
-     * Add page opens pre-filled, and `navigate.target` supports only `code`/`pageSlug`
-     * params (UI_ACTION_SYSTEM.md §7.0.1a). That is why it is a Layer 3 button rather than
-     * an `AdditionalActions` entry.
-     */
     /** Open a sibling invoice of the same outlet from the context card. */
     openInvoiceByCode: (target) => {
       const next = String(target || '').trim()
       if (next) nav.goTo('view', { code: next })
-    },
-
-    goToPayment: () => nav.goTo('add', {
-      scope: 'operation',
-      resourceSlug: 'outlet-payments',
-      query: { invoiceCode: code.value, outletCode: String(record.value?.OutletCode || '').trim() }
-    })
+    }
   }
 }
 

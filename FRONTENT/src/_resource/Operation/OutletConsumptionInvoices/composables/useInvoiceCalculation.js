@@ -40,9 +40,6 @@ import {
   netPayableOf,
   storedTaxBreakdown,
   invoicePolicyOf,
-  invoiceItemOf,
-  groupTaxDetails,
-  isTrue,
   PRE_TAX,
   POST_TAX
 } from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionInvoice'
@@ -265,21 +262,6 @@ export function settledOffOf (row = {}) {
   return Math.max(0, num(entry.SettlementMismatchAmount))
 }
 
-/**
- * Is this balance small enough to treat as settled?
- *
- * The threshold is the currency's own rounding interval, not a hardcoded 0.01: on a
- * currency that rounds to 0.05, a 3-fils residue is unpayable — no combination of coins
- * clears it — so an invoice carrying one would sit in the pending queue forever. This is
- * also what the `Waive-off Invoices` view keys off, from the other side.
- */
-export function isMicroBalance (balance, priceListCode = '') {
-  const { getCurrency, defaultCurrencyCode } = useCurrencyResource()
-  const currency = getCurrency(invoiceCurrencyOf(priceListCode) || text(defaultCurrencyCode?.value))
-  const interval = num(currency?.roundingInterval) || 0.01
-  return num(balance) <= interval
-}
-
 // Composable shape for setup-context callers. Same functions, one import (§5).
 export function useInvoiceCalculation () {
   return {
@@ -298,7 +280,6 @@ export function useInvoiceCalculation () {
     paidTotalOf,
     balanceDueOf,
     settledOffOf,
-    isMicroBalance,
     calculateConsumptionInvoice,
     netPayableOf,
     storedTaxBreakdown,
@@ -316,9 +297,6 @@ export {
   netPayableOf,
   storedTaxBreakdown,
   invoicePolicyOf,
-  invoiceItemOf,
-  groupTaxDetails,
-  isTrue,
   PRE_TAX,
   POST_TAX
 }

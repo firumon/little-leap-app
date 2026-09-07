@@ -41,8 +41,7 @@ import {
   grandTotalOf,
   paidTotalOf,
   balanceDueOf,
-  countsAsPayment,
-  isMicroBalance
+  countsAsPayment
 } from './useInvoiceCalculation'
 
 const text = (value) => (value == null ? '' : String(value).trim())
@@ -190,9 +189,7 @@ const shared = defineSharedComposable((dataStore) => {
         // Negative once the due date has passed. `null` when no due date was set, which is
         // NOT the same as "due today" and must not be banded as overdue.
         dueInDays: dueIn,
-        isOverdue: dueIn !== null && dueIn < 0 && isOpen(invoice),
-        isSettleable: isOpen(invoice) && balance > 0,
-        isMicro: isOpen(invoice) && balance > 0 && isMicroBalance(balance, invoice.PriceListCode)
+        isOverdue: dueIn !== null && dueIn < 0 && isOpen(invoice)
       }
     })
   })
@@ -221,28 +218,6 @@ const shared = defineSharedComposable((dataStore) => {
       overdueAmount: overdue.reduce((sum, row) => sum + row.balance, 0),
       overdueOutletCount: overdueOutlets.size
     }
-  })
-
-  /**
-   * Open invoices split by whether their due date has passed.
-   *
-   * Both halves are derived HERE rather than in the two list views that show them, so the
-   * "Overdue" pill's count and the overdue group inside the "Near Due" view are the same
-   * set counted twice, never two filters that can drift apart.
-   *
-   * `dueInDays` is negative once the date has passed; `null` means no due date was set,
-   * which is NOT overdue and is grouped with the upcoming side.
-   */
-  const dueSplit = computed(() => {
-    const open = openInvoices.value
-    const overdue = open.filter((row) => row.isOverdue)
-      // Longest overdue first — the oldest debt is the most likely to go bad.
-      .sort((a, b) => (a.dueInDays ?? 0) - (b.dueInDays ?? 0))
-    const upcoming = open.filter((row) => !row.isOverdue)
-      // Soonest due first, and undated rows last: an invoice with no due date cannot be
-      // ranked against one that has one, so it does not get to jump the queue.
-      .sort((a, b) => (a.dueInDays ?? Number.MAX_SAFE_INTEGER) - (b.dueInDays ?? Number.MAX_SAFE_INTEGER))
-    return { overdue, upcoming }
   })
 
   /**
@@ -295,13 +270,6 @@ const shared = defineSharedComposable((dataStore) => {
       atStartOfDay,
       rank: atStartOfDay > 0 ? (fromOverdue / atStartOfDay) * 100 : 0
     }
-  })
-
-  /** Today's invoicing activity — how many were raised and what they came to. */
-  const todayInvoicing = computed(() => {
-    const today = todayISO()
-    const raised = invoiceRows.value.filter((row) => row.date === today && row.progress !== CANCELLED)
-    return { count: raised.length, amount: raised.reduce((sum, row) => sum + row.total, 0) }
   })
 
   /** The set of consumption codes any LIVE invoice already covers. */
@@ -446,20 +414,6 @@ const shared = defineSharedComposable((dataStore) => {
     }))
   })
 
-  /** Outlets bucketed by how much they owe, into three runtime tiers. */
-  const pendingAmountBuckets = computed(() => {
-    const entries = outletPendings.value
-    const tiers = distributionTiers(entries.map((entry) => entry.balance), ['Small', 'Moderate', 'Large'])
-    if (!tiers.length) return []
-    entries.forEach((entry) => {
-      const tier = assignTier(tiers, entry.balance)
-      if (!tier) return
-      tier.count += 1
-      tier.total += entry.balance
-    })
-    return tiers
-  })
-
   // ── The list views ──────────────────────────────────────────────────────────
 
   /** The two runtime views — one groups by OUTLET, one reads a different resource. */
@@ -489,15 +443,6 @@ const shared = defineSharedComposable((dataStore) => {
     }
   })
 
-  /** One lookup for whichever view the switcher is on, stored or runtime. */
-  const rowsForView = (name) => {
-    const key = text(name)
-    const runtime = runtimeViews.value
-    if (Object.prototype.hasOwnProperty.call(runtime, key)) return runtime[key]
-    const stored = storedViews.value
-    return Object.prototype.hasOwnProperty.call(stored, key) ? stored[key] : invoiceRows.value
-  }
-
   /** Invoice code → its aggregate row, for O(1) reads from a View page or a payments card. */
   const rowByCode = computed(() => new Map(invoiceRows.value.map((row) => [row.code, row])))
 
@@ -515,8 +460,6 @@ const shared = defineSharedComposable((dataStore) => {
     openInvoices,
     collections,
     todayCollection,
-    dueSplit,
-    todayInvoicing,
     invoicedConsumptionCodes,
     consumptionItems,
     consumptionItemsByCode,
@@ -525,10 +468,8 @@ const shared = defineSharedComposable((dataStore) => {
     outletPendings,
     invoiceableOutlets,
     ageingBuckets,
-    pendingAmountBuckets,
     runtimeViews,
-    storedViews,
-    rowsForView
+    storedViews
   }
 })
 

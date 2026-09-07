@@ -83,7 +83,6 @@ export function useInvoiceAddContext () {
     ui,
     query,
     money: (value) => _C(num(value), true),
-    allowed: (permissions) => resourceConfig?.allowed?.(permissions) === true,
     resource: (name) => useRecord(name),
     skuLabelOf,
     skuCandidatesFor,
