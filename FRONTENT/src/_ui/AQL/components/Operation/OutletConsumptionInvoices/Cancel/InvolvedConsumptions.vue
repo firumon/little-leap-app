@@ -34,7 +34,8 @@
 // queue, so the operator sees the list before agreeing to it.
 import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
-import { useInvoiceCancelContext, elapsedLabel } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Cancel/useInvoiceCancelContext'
+import { useInvoiceCancelContext } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Cancel/useInvoiceCancelContext'
+import { elapsedLabel } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Index/useInvoiceRowPresets'
 
 defineOptions({ name: 'OutletConsumptionInvoicesCancelInvolvedConsumptions', inheritAttrs: false })
 

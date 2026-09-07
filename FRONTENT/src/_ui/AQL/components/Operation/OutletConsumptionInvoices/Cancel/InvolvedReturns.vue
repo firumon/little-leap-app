@@ -40,10 +40,8 @@
 // took goes back to waiting for adjustment.
 import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
-import {
-  useInvoiceCancelContext,
-  elapsedLabel
-} from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Cancel/useInvoiceCancelContext'
+import { useInvoiceCancelContext } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Cancel/useInvoiceCancelContext'
+import { elapsedLabel } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Index/useInvoiceRowPresets'
 
 defineOptions({ name: 'OutletConsumptionInvoicesCancelInvolvedReturns', inheritAttrs: false })
 

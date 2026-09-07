@@ -18,7 +18,6 @@ import {
 import { buildCancellationNodes } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoicePayload'
 import { consumptionCodesOf } from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionProgress'
 import { taxTransactionRowsOf } from 'src/_resource/Accounts/TaxTransactions/composables/useTaxTransactionPayload'
-import { elapsedLabel } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Index/useInvoiceRowPresets'
 
 // OutletConsumptionInvoices > Cancel - the one inject() behind the three cards, and the
 // route's own hydration point. `CANCEL_COMMENT` is working state: the builder stamps it
@@ -33,8 +32,6 @@ const SOURCES = [
 
 const text = (value) => (value == null ? '' : String(value).trim())
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
-
-export { elapsedLabel }
 
 export function useInvoiceCancelContext () {
   const pageState = inject('pageState', null)
