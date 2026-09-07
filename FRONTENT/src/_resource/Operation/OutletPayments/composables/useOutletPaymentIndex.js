@@ -1,15 +1,7 @@
-/**
- * OutletPayments › Index operational projections & metrics — Layer 2.
- *
- * Single aggregate projection for payment collections, overdue monitoring,
- * linear progress pipeline, and multi-queue list switcher views.
- *
- * Built through `defineSharedComposable` for memoized single-pass execution.
- */
-
 import { computed } from 'vue'
 import { defineSharedComposable } from 'src/utils/appHelpers'
 import { useDataStore } from 'src/stores/data'
+import { parseAnyDate } from 'src/utils/dateHelpers'
 import {
   netInvoiceTotalOf,
   paidTotalOf,
@@ -132,7 +124,6 @@ const shared = defineSharedComposable((dataStore) => {
           ageDays: daysSince(inv.Date),
           dueInDays: dueIn,
           isOverdue: dueIn !== null && dueIn < 0 && isInvoiceOpen,
-          isNearDue: dueIn !== null && dueIn >= 0 && dueIn <= 7 && isInvoiceOpen,
           isOpen: isInvoiceOpen
         }
       })
@@ -198,9 +189,7 @@ const shared = defineSharedComposable((dataStore) => {
     }
   })
 
-  // Linear Collection Progress Bar
-  // Denominator: Overdue invoice amount + Today's collections from overdue invoices
-  // Numerator: Today's collections from overdue invoices
+  // Progress bar: how much of today's overdue book was collected today.
   const linearProgressData = computed(() => {
     const today = todayISO()
     const todayPayments = paymentRows.value.filter(p => p.date === today && !p.isCancelled)
@@ -230,32 +219,45 @@ const shared = defineSharedComposable((dataStore) => {
   const byDateDesc = (a, b) => (b.date || '').localeCompare(a.date || '')
   const byDueAsc = (a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')
 
+  const recencyOf = (row) => {
+    const stamp = parseAnyDate(row?.UpdatedAt) || parseAnyDate(row?.date)
+    return stamp ? stamp.getTime() : 0
+  }
+
+  // One entry per outlet that still owes money, with its open invoices carried along.
+  const outletDebts = (open) => {
+    const map = new Map()
+    open.forEach(inv => {
+      const code = inv.outletCode
+      if (!code) return
+      let entry = map.get(code)
+      if (!entry) {
+        entry = { code, name: inv.outletName || code, totalBalance: 0, invoiceCount: 0, invoices: [] }
+        map.set(code, entry)
+      }
+      entry.totalBalance += inv.balance
+      entry.invoiceCount += 1
+      entry.invoices.push(inv)
+    })
+    return [...map.values()]
+      .map(entry => ({ ...entry, totalBalance: Number(entry.totalBalance.toFixed(2)) }))
+      .sort((a, b) => b.totalBalance - a.totalBalance)
+  }
+
+  const RECENT_LIMIT = 50
+
   const views = computed(() => {
     const open = openInvoices.value
     const allPayments = paymentRows.value
 
     return {
-      NearDue: open.filter(inv => inv.isNearDue).sort(byDueAsc),
-      Overdue: open.filter(inv => inv.isOverdue).sort(byDueAsc),
-      PendingInvoices: [...open].sort((a, b) => (a.date || '').localeCompare(b.date || '')),
-      HighValueInvoices: [...open].sort((a, b) => b.balance - a.balance),
-      Collections: allPayments.filter(p => p.isSubmitted).sort(byDateDesc),
-      Cancelled: allPayments.filter(p => p.isCancelled).sort(byDateDesc)
+      Recent: [...allPayments].sort((a, b) => recencyOf(b) - recencyOf(a)).slice(0, RECENT_LIMIT),
+      OverdueInvoices: open.filter(inv => inv.isOverdue).sort(byDueAsc),
+      Outlets: outletDebts(open),
+      CompletedPayments: allPayments.filter(p => p.isSubmitted).sort(byDateDesc),
+      CancelledPayments: allPayments.filter(p => p.isCancelled).sort(byDateDesc)
     }
   })
-
-  /**
-   * The collections queue split into the two groups a collector works in a different order:
-   * what is ALREADY LATE, and what is COMING UP.
-   *
-   * Both halves are projections of the SAME `views` object the Overdue pill counts, so the
-   * "Near Due" view and the "Overdue" view can never disagree about which invoice is late
-   * (CORE_ARCHITECTURE_RULES §6 — Enrich Once, Then Project).
-   */
-  const dueSplit = computed(() => ({
-    overdue: views.value.Overdue,
-    upcoming: views.value.NearDue
-  }))
 
   return {
     rawInvoices,
@@ -273,8 +275,7 @@ const shared = defineSharedComposable((dataStore) => {
     overdueMetrics,
     todayCollectionsMetrics,
     linearProgressData,
-    views,
-    dueSplit
+    views
   }
 })
 

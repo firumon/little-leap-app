@@ -5,55 +5,64 @@
       This receipt can no longer be cancelled.
     </q-banner>
 
+    <SectionDividerLabel label="PAYMENT RECEIPT" />
     <q-card flat bordered :class="ui.cardClass">
       <q-card-section>
         <div class="row items-center no-wrap q-col-gutter-sm">
           <div class="col" :class="ui.flexWrapTextClass">
-            <div class="text-caption text-grey-7">CANCELLING</div>
-            <div class="text-subtitle1 text-weight-medium">{{ code }}</div>
-            <div class="text-caption text-grey-8">{{ outletName }}</div>
+            <div class="text-subtitle1 text-weight-bold">{{ outletName }}</div>
+            <div class="text-caption text-grey-7">{{ metaLine }}</div>
           </div>
-          <div class="col-auto text-h6">{{ money(amount) }}</div>
+          <div class="col-auto text-right text-h5 text-weight-bold no-wrap">
+            {{ money(amount) }}
+          </div>
         </div>
+      </q-card-section>
 
-        <q-list separator dense class="q-mt-sm">
-          <q-item>
-            <q-item-section>Credited invoice</q-item-section>
-            <q-item-section side>{{ invoiceCode || '—' }}</q-item-section>
-          </q-item>
-          <q-item>
-            <q-item-section>Invoice total</q-item-section>
-            <q-item-section side>{{ money(invoiceTotal) }}</q-item-section>
-          </q-item>
-          <q-item>
-            <q-item-section>Still owed after this</q-item-section>
-            <q-item-section side class="text-weight-medium text-orange-9">
-              {{ money(balanceAfter) }}
-            </q-item-section>
-          </q-item>
-        </q-list>
+      <q-separator />
+
+      <q-card-section v-if="invoiceCode" class="q-gutter-y-xs">
+        <div class="row items-center no-wrap text-body2">
+          <div class="col text-grey-8">Credited invoice</div>
+          <div class="col-auto text-weight-medium">{{ invoiceCode }}</div>
+        </div>
+        <div class="row items-center no-wrap text-body2">
+          <div class="col text-grey-8">Invoice total</div>
+          <div class="col-auto">{{ money(invoiceTotal) }}</div>
+        </div>
+        <div class="row items-center no-wrap text-body2">
+          <div class="col text-grey-8">Still owed after this</div>
+          <div class="col-auto text-orange-9 text-weight-medium">{{ money(balanceAfter) }}</div>
+        </div>
+      </q-card-section>
+
+      <q-card-section v-else class="text-caption text-grey-7">
+        No invoice is credited by this receipt.
       </q-card-section>
     </q-card>
 
+    <SectionDividerLabel label="CANCELLATION REASON" />
     <q-card flat bordered :class="[ui.cardClass, ui.accentCardClass]" :style="ui.accentBorderStyle">
-      <q-card-section :class="gutterClass">
-        <div class="text-subtitle1 text-weight-medium">Why is this receipt cancelled?</div>
-        <div class="text-caption text-grey-8">{{ outcome }}</div>
+      <q-card-section>
+        <div class="text-caption text-grey-8 q-mb-sm">{{ outcome }}</div>
 
         <component
           :is="TextareaField"
           :model-value="comment"
           :record="{}"
-          :config="{ label: 'Cancellation Reason *', required: true }"
+          :config="{ label: 'Cancellation Reason *', required: true, rows: 3 }"
           header="ProgressCancelledComment"
           :disable="!canCancel"
           @update:model-value="(value) => { comment = value }"
         />
+
+        <div class="text-caption text-grey-7 q-mt-xs">
+          Saved on the receipt's Cancelled Comment for audit.
+        </div>
       </q-card-section>
     </q-card>
   </div>
 </template>
-
 <script setup>
 /**
  * OutletPayments › Cancel › CancelConfirm — the cancel action route's only card.
@@ -69,6 +78,7 @@
  * No `<style>` block (ARCHITECTURE RULES §7).
  */
 import { computed, inject, watch, useAttrs } from 'vue'
+import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { resolveFieldComponent } from 'src/_fields/useFieldResolver'
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useRouteConfig } from 'src/composables/resources/useRouteConfig'
@@ -126,6 +136,12 @@ const record = computed(() => {
 const amount = computed(() => num(record.value?.Amount))
 const outletCode = computed(() => text(record.value?.OutletCode))
 const outletName = computed(() => text(getOutlet(outletCode.value)?.Name) || outletCode.value)
+
+const metaLine = computed(() => [
+  code.value,
+  text(record.value?.Date),
+  text(record.value?.Mode)
+].filter(Boolean).join(' • '))
 
 const invoiceCode = computed(() => text(record.value?.OutletConsumptionInvoiceCode))
 const invoice = computed(() =>

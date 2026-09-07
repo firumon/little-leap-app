@@ -1,4 +1,4 @@
-import { inject, computed } from 'vue'
+import { inject, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import { useAuth } from 'src/composables/core/useAuth'
@@ -145,15 +145,23 @@ export function useOutletPaymentAddContext () {
     set: (value) => setField('Reference', text(value))
   })
 
-  const waiveResidual = computed({
-    get: () => field('WaiveResidual', false) === true,
-    set: (value) => setField('WaiveResidual', value === true)
-  })
-
   const waiverReasons = computed(() => settlementReasons())
 
+  const defaultWaiverReason = () => waiverReasons.value[0] || 'Waived Off'
+
+  const waiveResidual = computed({
+    get: () => field('WaiveResidual', false) === true,
+    set: (value) => {
+      const on = value === true
+      // Turning the waiver on with no reason picked would make Layer 2 refuse the build and
+      // toast on every keystroke, so the first reason is seeded here.
+      if (on && !text(field('WaiverReason'))) setField('WaiverReason', defaultWaiverReason())
+      setField('WaiveResidual', on)
+    }
+  })
+
   const waiverReason = computed({
-    get: () => text(field('WaiverReason')) || waiverReasons.value[0] || '',
+    get: () => text(field('WaiverReason')) || defaultWaiverReason(),
     set: (value) => setField('WaiverReason', text(value))
   })
 
@@ -257,6 +265,12 @@ export function useOutletPaymentAddContext () {
     })
   })
 
+  // A changed amount or invoice set can make the waiver illegal. The flag must go with it,
+  // or the build keeps failing on a waiver the screen no longer offers.
+  watch(canWaiveResidual, (allowed) => {
+    if (!allowed && field('WaiveResidual', false) === true) setField('WaiveResidual', false)
+  })
+
   const waiverLimit = computed(() => residualThreshold(selectedInvoices.value[0]?.PriceListCode))
 
   // The audit sentence the waiver will write, built by the same Layer 2 function that
@@ -317,7 +331,7 @@ export function useOutletPaymentAddContext () {
     // Whatever the row that opened this page knew. Going through the setters resolves the
     // outlet's invoice list and the default amount exactly as picking them by hand would.
     const seededOutlet = text(route.query.outletCode)
-    const seededInvoice = text(route.query.invoiceCode)
+    const seededInvoice = text(route.query.invoiceCode) || text(route.query.invCode)
 
     if (seededOutlet && !text(field('OutletCode'))) outletCode.value = seededOutlet
     if (seededInvoice && !selectedCodes.value.length) setSelectedCodes([seededInvoice])
@@ -372,7 +386,9 @@ export function useOutletPaymentAddContext () {
       actorName: collectorName.value,
       existingPayments: index.rawPayments.value,
       waiveResidual: field('WaiveResidual', false) === true,
-      waiverReason: text(field('WaiverReason')),
+      // `waiverReason` falls back to the first reason, so an active waiver is never sent
+      // with a blank reason the builder would reject.
+      waiverReason: field('WaiveResidual', false) === true ? text(waiverReason.value) : '',
       waiverComment: text(field('WaiverComment'))
     }))
 

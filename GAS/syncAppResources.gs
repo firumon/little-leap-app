@@ -1741,23 +1741,13 @@ function initAppResourcesCodeConfig() {
             {"id":"rep_1776000000026","name":"payment-log","label":"Payment Log","templateSheet":"PaymentRecords","isRecordLevel":false,"inputs":[{"label":"Date","type":"select","targetCell":"J11","source":{"resource":"OutletPayments","field":"Date"},"default":"All Date","required":false},{"label":"Username","type":"select","targetCell":"J12","source":{"resource":"OutletPayments","field":"Username"},"default":"Any User","required":false},{"label":"Payment Mode","type":"select","targetCell":"J13","source":{"resource":"OutletPayments","field":"Mode"},"default":"Every Mode","required":false}],"pdfOptions":{}}
         ]),
         CustomUIName: '',
-        // Six queues, declared here so `NearDue` is the page's DEFAULT view and every pill
-        // resolves its `Index/List<Name>.vue` override. Without this row the resource falls
-        // through to auto-derived views (one per `Progress` value — "Submitted", "Cancelled"),
-        // and the Index opens on a view no override is registered for.
-        //
-        // The four invoice queues project OutletConsumptionInvoices at runtime, not this
-        // resource's own rows, so their filters below are never what fills them — the `.vue`
-        // override reads the Layer 2 aggregate. The entries exist for the NAME, the default
-        // flag and the pill order; the labels/icons/counts are supplied by
-        // `Index/ListSwitcher.js`.
+        // Only the payment-domain views live here. The Overdue Invoices and Outlets pills
+        // project OutletConsumptionInvoices at runtime, so they are declared in
+        // `Index/ListSwitcher.js` instead and read the Layer 2 aggregate.
         ListViews: JSON.stringify([
-            { "name": "NearDue", "label": "Near Due", "icon": "event", "color": "primary", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SUBMITTED" }] } },
-            { "name": "Overdue", "label": "Overdue", "icon": "running_with_errors", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SUBMITTED" }] } },
-            { "name": "PendingInvoices", "label": "Pending", "icon": "pending_actions", "color": "orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SUBMITTED" }] } },
-            { "name": "HighValueInvoices", "label": "High Value", "icon": "trending_up", "color": "deep-orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SUBMITTED" }] } },
-            { "name": "Collections", "label": "Collections", "icon": "savings", "color": "teal-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SUBMITTED" }] } },
-            { "name": "Cancelled", "label": "Cancelled", "icon": "block", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
+            { "name": "Recent", "label": "Recent", "icon": "history", "color": "indigo-7", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
+            { "name": "CompletedPayments", "label": "Completed Payments", "icon": "savings", "color": "teal-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SUBMITTED" }] } },
+            { "name": "CancelledPayments", "label": "Cancelled Payments", "icon": "block", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),
         Relations: JSON.stringify({
             OutletCode: CONFIG.MASTER_SHEETS.OUTLETS

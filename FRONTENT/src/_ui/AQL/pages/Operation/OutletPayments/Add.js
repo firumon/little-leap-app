@@ -15,6 +15,8 @@
  * `sections` carries only the header: the wizard's own cards are `contents`, because they are
  * the page's subject rather than furniture around it.
  */
+const RESOURCE = 'OutletPayments'
+
 export default {
   sections: ['PageHeader'],
   contents: [
@@ -30,5 +32,11 @@ export default {
 
   PropsSelectInvoices: { step: 1 },
   PropsPaymentDetails: { step: 2 },
-  PropsPaymentReview: { step: 3 }
+  PropsPaymentReview: { step: 3 },
+
+  // Page.vue keeps ONE pageState per Page mount and never clears it, so the nodes of the
+  // page visited before this one are still here (UI_PAGE_STATE_NODES §5.7A).
+  ready ({ pageState }) {
+    pageState.resetForResource(RESOURCE)
+  }
 }
