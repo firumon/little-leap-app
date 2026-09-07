@@ -75,7 +75,10 @@ export function buildConsumptionCancellationNodes (record = {}, reason = '', opt
       comment: cascadeNote,
       actorName,
       returnRows: options.invoiceReturnRows || [],
-      taxTransactionRows: options.invoiceTaxRows || null
+      taxTransactionRows: options.invoiceTaxRows || null,
+      // This consumption is being CANCELLED here, so it must not also be walked back to
+      // the invoiceable queue by the invoice's own reversal.
+      skipConsumptionCodes: [code]
     }))
   }
 
