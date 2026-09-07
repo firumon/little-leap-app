@@ -1,25 +1,25 @@
 <template>
   <AppList
     v-bind="preset"
-    empty-text="Nothing overdue."
+    empty-text="Nothing falls due this week."
     empty-icon="task_alt"
     @click="onOpen"
   />
 </template>
 
 <script setup>
-// Every invoice past its due date, longest overdue first. Same set the Overdue metric card
-// counts — one derivation, two consumers.
+// Open invoices falling due within a week, soonest first. Overdue rows are NOT here — they
+// have their own pill, so the two queues never blur into one list.
 import { computed } from 'vue'
 import AppList from 'components/app/AppList.vue'
 import { useInvoiceIndexContext } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Index/useInvoiceIndexContext'
 import { invoiceDueRowPreset } from 'src/_ui/AQL/composables/Operation/OutletConsumptionInvoices/Index/useInvoiceRowPresets'
 
-defineOptions({ name: 'OutletConsumptionInvoicesListOverdue', inheritAttrs: false })
+defineOptions({ name: 'OutletConsumptionInvoicesListDueIn', inheritAttrs: false })
 
 const { storedViews, openInvoice } = useInvoiceIndexContext()
 
-const preset = computed(() => invoiceDueRowPreset(storedViews.value.Overdue, { chipColor: 'negative' }))
+const preset = computed(() => invoiceDueRowPreset(storedViews.value.DueIn, { short: true }))
 
 const onOpen = (item) => openInvoice(item?.code)
 </script>

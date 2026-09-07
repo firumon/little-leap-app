@@ -8,7 +8,7 @@
  * of zeroes.
  *
  * ── EVERY LIST VIEW IS A `.vue` OVERRIDE ──
- * There are no `PropsList<View>` blocks here, and that is deliberate. All nine views render
+ * There are no `PropsList<View>` blocks here, and that is deliberate. All eight views render
  * from the Layer 2 aggregate (`useInvoiceIndex`) rather than from the resolver's raw records:
  * a raw row carries an outlet CODE and no derived balance, so a list built from it shows
  * `OUT00001` and a figure that disagrees with the same invoice one pill away. Reading the

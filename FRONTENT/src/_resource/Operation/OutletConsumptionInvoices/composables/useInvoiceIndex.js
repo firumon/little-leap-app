@@ -34,6 +34,7 @@ import {
   progressOf,
   isOpen,
   PAID,
+  PARTIALLY_PAID,
   CANCELLED
 } from './useInvoiceWorkflow'
 import {
@@ -176,6 +177,9 @@ const shared = defineSharedComposable((dataStore) => {
         outletName: names.get(outletCode) || outletCode,
         date: text(invoice.Date),
         dueDate: text(invoice.DueDate),
+        // Epoch ms, so Recent can sort on it. Audit columns already hold that; the date
+        // column is parsed, and a row with neither sorts last rather than first.
+        updatedAt: num(invoice.UpdatedAt) || num(invoice.CreatedAt) || Date.parse(text(invoice.Date)) || 0,
         progress: progressOf(invoice),
         username: text(invoice.Username),
         total,
@@ -456,38 +460,30 @@ const shared = defineSharedComposable((dataStore) => {
     return tiers
   })
 
-  // ── The five runtime list views ─────────────────────────────────────────────
+  // ── The list views ──────────────────────────────────────────────────────────
 
-  /**
-   * Every runtime view, as `{ rows, sort }` already applied.
-   *
-   * Ordering is a WORK ORDER, not a preference (UI_MODULE_DEVELOPER_GUIDE §7.2): the oldest
-   * debt is the one most likely to go bad, so the collection views lead with it, while the
-   * high-value view leads with the largest exposure instead.
-   */
-  const runtimeViews = computed(() => {
-    const open = openInvoices.value
+  /** The two runtime views — one groups by OUTLET, one reads a different resource. */
+  const runtimeViews = computed(() => ({
+    OutletPendings: outletPendings.value,
+    Invoiceable: invoiceableOutlets.value
+  }))
 
-    const byOldest = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+  const RECENT_LIMIT = 50
 
-    return {
-      OutletPendings: outletPendings.value,
-      InvoiceableOutlets: invoiceableOutlets.value,
-      // A real balance — anything at or below the currency's rounding interval is unpayable
-      // and belongs in the waive-off queue instead, never in both.
-      PendingInvoices: open.filter((row) => row.balance > 0 && !row.isMicro).sort(byOldest),
-      HighValueInvoices: open.filter((row) => row.balance > 0 && !row.isMicro).sort((a, b) => b.balance - a.balance),
-      WaiveOffInvoices: open.filter((row) => row.isMicro).sort(byOldest)
-    }
-  })
-
-  /** The four column-filter views, projected off the same aggregate for card reuse. */
+  /** The column-filter views, projected off the same aggregate for card reuse. */
   const storedViews = computed(() => {
     const all = invoiceRows.value
+    const byUpdatedDesc = (a, b) => b.updatedAt - a.updatedAt
+
     return {
-      NearDue: all.filter((row) => isOpen(row.invoice) && row.dueInDays !== null && row.dueInDays >= 0 && row.dueInDays <= 7)
+      // Cancelled rows included on purpose: Recent answers "what moved lately", and a
+      // cancellation is a move.
+      Recent: [...all].sort(byUpdatedDesc).slice(0, RECENT_LIMIT),
+      DueIn: all.filter((row) => isOpen(row.invoice) && row.dueInDays !== null && row.dueInDays >= 0 && row.dueInDays <= 7)
         .sort((a, b) => a.dueInDays - b.dueInDays),
       Overdue: all.filter((row) => row.isOverdue).sort((a, b) => a.dueInDays - b.dueInDays),
+      // Oldest touched first: a part payment that has sat longest is the one going stale.
+      PartiallyPaid: all.filter((row) => row.progress === PARTIALLY_PAID).sort((a, b) => -byUpdatedDesc(a, b)),
       Completed: all.filter((row) => row.progress === PAID).sort((a, b) => (a.date < b.date ? 1 : -1)),
       Cancelled: all.filter((row) => row.progress === CANCELLED).sort((a, b) => (a.date < b.date ? 1 : -1))
     }
