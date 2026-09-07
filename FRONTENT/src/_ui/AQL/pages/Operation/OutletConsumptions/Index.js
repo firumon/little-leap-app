@@ -14,6 +14,7 @@ export default {
     'Gauge',
     'AgeingBuckets',
     'ConsumptionVolume',
+    'UserWiseConsumptionPerformance',
     'FilterInput',
     'ListSwitcher'
   ],
