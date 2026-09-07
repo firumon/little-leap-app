@@ -84,6 +84,11 @@ function normalizeIncomingRequest(raw) {
     mergedPayload.requests = requests.map(function (entry) {
       return normalizeBatchSubRequest(entry);
     });
+    var formTicket = normalizeFormTicket(
+      mergedPayload.formTicket !== undefined ? mergedPayload.formTicket : source.formTicket
+    );
+    if (formTicket) mergedPayload.formTicket = formTicket;
+    else delete mergedPayload.formTicket;
   }
 
   return {
@@ -94,6 +99,14 @@ function normalizeIncomingRequest(raw) {
     resource: resource,
     payload: mergedPayload
   };
+}
+
+// Cache keys have a length cap, so a long or odd ticket is rejected rather than
+// silently truncated into a key that could collide with another form.
+function normalizeFormTicket(raw) {
+  var ticket = (raw === null || raw === undefined ? '' : raw).toString().trim();
+  if (!ticket || ticket.length > 100) return '';
+  return /^[A-Za-z0-9_-]+$/.test(ticket) ? ticket : '';
 }
 
 function normalizeBatchSubRequest(raw) {
@@ -269,6 +282,17 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
       mergeResourcePayloadMap(resources, envelope && envelope.data ? envelope.data.resources : {});
       return envelope;
     });
+    // Replayed steps hold only a code, so their rows arrive as a runtime delta.
+    var deltas = rawResult && rawResult.deltaResources;
+    if (deltas && typeof deltas === 'object') {
+      Object.keys(deltas).forEach(function (resourceName) {
+        var delta = deltas[resourceName];
+        if (!delta || !Array.isArray(delta.rows)) return;
+        resources[resourceName] = buildResourcePayload(
+          resourceName, delta.rows, delta.meta, delta.headers, requestPayload
+        );
+      });
+    }
     return { resources: resources, result: result, artifacts: {} };
   }
 
@@ -486,6 +510,11 @@ function parseRequestPayload(e) {
   }
 }
 
+var FT_CACHE_TTL_SECONDS = 1800;
+var FT_STALE_HEARTBEAT_MS = 45000;
+var FT_POLL_INTERVAL_MS = 2500;
+var FT_POLL_CEILING_MS = 20000;
+
 /**
  * Handles batching multiple API actions together sequentially.
  */
@@ -495,38 +524,318 @@ function handleBatchActions(auth, payload) {
     return { success: false, message: 'No requests provided for batch action' };
   }
 
-  var results = [];
-  var anyFailed = false;
-  var batchContext = createBatchContext();
-
-  for (var i = 0; i < requests.length; i++) {
-    try {
-      var req = resolveBatchReferencesDeep(requests[i], batchContext);
-      var action = (req.action || '').toString().trim();
-      if (!action) {
-        results.push({ success: false, message: 'Action is required' });
-        anyFailed = true;
-        continue;
-      }
-
-      var res = dispatchProtectedAction(action, auth, req);
-      results.push(res);
-      if (!res.success) {
-        anyFailed = true;
-      } else {
-        updateBatchContextFromResult(batchContext, req, res);
-      }
-    } catch (e) {
-      results.push({ success: false, message: e && e.message ? e.message : e.toString() });
-      anyFailed = true;
-    }
+  // Same ticket means the same form submission. The ticket owns its own cache
+  // key, so two different forms never wait on each other and no script lock is
+  // taken anywhere in this path.
+  var formTicket = normalizeFormTicket(payload.formTicket);
+  if (!formTicket) {
+    return runBatchQueue(auth, payload, requests, null, null, null);
   }
 
+  var cacheKey = 'FT_' + formTicket;
+  var cache = openScriptCache();
+  var state = cache ? readFormTicketState(cache, cacheKey, requests.length) : null;
+
+  if (!state) {
+    state = createFormTicketState(requests);
+    writeFormTicketState(cache, cacheKey, state);
+    return runBatchQueue(auth, payload, requests, cache, cacheKey, state);
+  }
+
+  if (state.finished) {
+    return buildFormTicketReplayResult(auth, payload, requests, state);
+  }
+
+  var idleFor = Date.now() - Number(state.lastUpdatedAt || 0);
+  if (idleFor < FT_STALE_HEARTBEAT_MS) {
+    var waited = 0;
+    while (waited < FT_POLL_CEILING_MS) {
+      Utilities.sleep(FT_POLL_INTERVAL_MS);
+      waited += FT_POLL_INTERVAL_MS;
+      var fresh = cache ? readFormTicketState(cache, cacheKey, requests.length) : null;
+      if (!fresh) break;
+      if (fresh.finished) {
+        return buildFormTicketReplayResult(auth, payload, requests, fresh);
+      }
+    }
+    return {
+      success: false,
+      inProgress: true,
+      message: 'Your form is still being saved. Please wait a moment.',
+      data: []
+    };
+  }
+
+  // The heartbeat went quiet, so the first run died mid-flight. Put back what it
+  // had claimed and take over the rest of the queue.
+  state.queue = state.processing.concat(state.queue);
+  state.processing = [];
+  return runBatchQueue(auth, payload, requests, cache, cacheKey, state);
+}
+
+function createFormTicketState(requests) {
+  var now = Date.now();
+  var queue = [];
+  for (var i = 0; i < requests.length; i++) queue.push(i);
   return {
-    success: !anyFailed,
-    message: anyFailed ? 'One or more batch actions failed' : 'Batch actions completed successfully',
+    initiated: now,
+    lastUpdatedAt: now,
+    finished: false,
+    resources: collectBatchResourceNames(requests),
+    queue: queue,
+    processing: [],
+    completed: [],
+    refs: scanBatchReferencePaths(requests)
+  };
+}
+
+// The queue holds step indexes, not step bodies. A retry always resends the same
+// requests array under the same ticket, so keeping the bodies would only push the
+// cached state past its size budget for nothing.
+function readFormTicketState(cache, cacheKey, requestCount) {
+  try {
+    var raw = cache.get(cacheKey);
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!Array.isArray(parsed.queue) || !Array.isArray(parsed.completed)) return null;
+    parsed.processing = Array.isArray(parsed.processing) ? parsed.processing : [];
+    parsed.resources = Array.isArray(parsed.resources) ? parsed.resources : [];
+    parsed.refs = parsed.refs && typeof parsed.refs === 'object' ? parsed.refs : {};
+    parsed.finished = parsed.finished === true;
+    var pending = parsed.queue.concat(parsed.processing);
+    for (var i = 0; i < pending.length; i++) {
+      var index = Number(pending[i]);
+      if (!(index >= 0 && index < requestCount)) return null;
+    }
+    return parsed;
+  } catch (readErr) {
+    return null;
+  }
+}
+
+function writeFormTicketState(cache, cacheKey, state) {
+  if (!cache || !cacheKey || !state) return;
+  try {
+    cache.put(cacheKey, JSON.stringify(state), FT_CACHE_TTL_SECONDS);
+  } catch (putErr) { /* a cache miss next time is safer than failing the write */ }
+}
+
+function stampFormTicketState(cache, cacheKey, state) {
+  state.lastUpdatedAt = Date.now();
+  writeFormTicketState(cache, cacheKey, state);
+}
+
+function collectBatchResourceNames(requests) {
+  var names = [];
+  var seen = {};
+  var push = function (value) {
+    if (Array.isArray(value)) {
+      value.forEach(push);
+      return;
+    }
+    var name = (value === null || value === undefined ? '' : value).toString().trim();
+    if (!name) return;
+    var key = name.toLowerCase();
+    if (seen[key]) return;
+    seen[key] = true;
+    names.push(name);
+  };
+
+  (requests || []).forEach(function (req) {
+    if (!req || typeof req !== 'object') return;
+    push(req.resource);
+    push(req.resources);
+    push(req.targetResource);
+  });
+
+  return names;
+}
+
+function scanBatchReferencePaths(value, collected) {
+  var refs = collected || {};
+
+  if (Array.isArray(value)) {
+    value.forEach(function (item) { scanBatchReferencePaths(item, refs); });
+    return refs;
+  }
+  if (!value || typeof value !== 'object') return refs;
+
+  if (value.$ref !== undefined) {
+    var path = (value.$ref === null ? '' : value.$ref).toString().trim();
+    if (path && refs[path] === undefined) refs[path] = null;
+  }
+
+  Object.keys(value).forEach(function (key) {
+    scanBatchReferencePaths(value[key], refs);
+  });
+
+  return refs;
+}
+
+// Codes recovered from cache are replayed into the batch context, so a taken-over
+// run resolves $ref through the same path walker as a first run.
+function seedBatchContextFromRefs(batchContext, refs) {
+  Object.keys(refs || {}).forEach(function (path) {
+    var code = refs[path];
+    if (code === null || code === undefined || code === '') return;
+    var parts = path.split('.').map(function (part) { return part.trim(); }).filter(Boolean);
+    if (parts.length < 2) return;
+    var cursor = ensureBatchContextResource(batchContext, parts[0]);
+    for (var i = 1; i < parts.length - 1; i++) {
+      if (!cursor[parts[i]] || typeof cursor[parts[i]] !== 'object') cursor[parts[i]] = {};
+      cursor = cursor[parts[i]];
+    }
+    cursor[parts[parts.length - 1]] = code;
+  });
+}
+
+function refreshResolvedRefs(refs, batchContext) {
+  Object.keys(refs || {}).forEach(function (path) {
+    if (refs[path]) return;
+    try {
+      var resolved = resolveBatchReferencePath(batchContext, path);
+      if (typeof resolved === 'string' && resolved) refs[path] = resolved;
+    } catch (refErr) { /* not produced yet — a later step fills it in */ }
+  });
+}
+
+function extractStepCode(res) {
+  var data = res && res.data && typeof res.data === 'object' && !Array.isArray(res.data) ? res.data : {};
+  var parentCode = (data.parentCode === null || data.parentCode === undefined ? '' : data.parentCode).toString().trim();
+  if (parentCode) return { key: 'parentCode', code: parentCode };
+  var code = (data.code === null || data.code === undefined ? '' : data.code).toString().trim();
+  if (code) return { key: 'code', code: code };
+  return null;
+}
+
+function buildCompletedStepResult(entry) {
+  var data = {};
+  if (entry && entry.code) data[entry.codeKey || 'code'] = entry.code;
+  return {
+    success: !!(entry && entry.success !== false),
+    message: entry && entry.message ? entry.message : '',
+    data: data
+  };
+}
+
+function buildFormTicketStepResults(requests, state, liveResults) {
+  var byIndex = {};
+  (state.completed || []).forEach(function (entry) {
+    if (entry && entry.index !== undefined) byIndex[entry.index] = entry;
+  });
+
+  var live = liveResults || {};
+  var results = [];
+  for (var i = 0; i < requests.length; i++) {
+    results.push(live[i] ? live[i] : buildCompletedStepResult(byIndex[i]));
+  }
+  return results;
+}
+
+// Nothing here writes to the sheet. The rows come back as a plain read delta,
+// exactly the way a fresh run would have returned them.
+function buildFormTicketReplayResult(auth, payload, requests, state) {
+  return {
+    success: true,
+    replayed: true,
+    message: 'Batch actions completed successfully',
+    data: buildFormTicketStepResults(requests, state, null),
+    deltaResources: collectWriteDeltaResources(auth, payload, state.resources || [])
+  };
+}
+
+function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
+  var tracked = !!state;
+  if (!tracked) state = createFormTicketState(requests);
+
+  var batchContext = createBatchContext();
+  seedBatchContextFromRefs(batchContext, state.refs);
+
+  var liveResults = {};
+  var failure = null;
+
+  while (state.queue.length) {
+    var index = Number(state.queue.shift());
+    state.processing = [index];
+    if (tracked) stampFormTicketState(cache, cacheKey, state);
+
+    var stepResult;
+    var resolvedReq = null;
+    try {
+      resolvedReq = resolveBatchReferencesDeep(requests[index], batchContext);
+      var action = (resolvedReq.action || '').toString().trim();
+      if (!action) throw new Error('Action is required');
+      stepResult = dispatchProtectedAction(action, auth, resolvedReq);
+    } catch (e) {
+      stepResult = { success: false, message: e && e.message ? e.message : e.toString() };
+    }
+
+    if (!stepResult || stepResult.success !== true) {
+      state.processing = [];
+      state.queue.unshift(index);
+      if (tracked) stampFormTicketState(cache, cacheKey, state);
+      failure = { index: index, result: stepResult || { success: false, message: 'Batch action failed' } };
+      break;
+    }
+
+    updateBatchContextFromResult(batchContext, resolvedReq, stepResult);
+    refreshResolvedRefs(state.refs, batchContext);
+
+    var stepCode = extractStepCode(stepResult);
+    state.processing = [];
+    state.completed.push({
+      index: index,
+      action: (resolvedReq.action || '').toString().trim(),
+      resource: resolvedReq.resource || '',
+      code: stepCode ? stepCode.code : '',
+      codeKey: stepCode ? stepCode.key : '',
+      message: stepResult.message || '',
+      success: true
+    });
+    if (tracked) stampFormTicketState(cache, cacheKey, state);
+
+    liveResults[index] = stepResult;
+  }
+
+  var liveCount = Object.keys(liveResults).length;
+  var results = buildFormTicketStepResults(requests, state, liveResults);
+
+  if (failure) {
+    results[failure.index] = failure.result;
+    var result = {
+      success: false,
+      message: 'One or more batch actions failed',
+      data: results
+    };
+    // Steps replayed from cache carry no rows, so the client needs a read delta.
+    if (liveCount < (state.completed || []).length) {
+      result.deltaResources = collectWriteDeltaResources(auth, payload, state.resources || []);
+    }
+    return result;
+  }
+
+  state.finished = true;
+  if (tracked) stampFormTicketState(cache, cacheKey, state);
+
+  var finalResult = {
+    success: true,
+    message: 'Batch actions completed successfully',
     data: results
   };
+  if (liveCount < requests.length) {
+    if (liveCount === 0) finalResult.replayed = true;
+    finalResult.deltaResources = collectWriteDeltaResources(auth, payload, state.resources || []);
+  }
+  return finalResult;
+}
+
+function openScriptCache() {
+  try {
+    return CacheService.getScriptCache();
+  } catch (cacheErr) {
+    return null;
+  }
 }
 
 function createBatchContext() {

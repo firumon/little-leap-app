@@ -39,6 +39,7 @@ Use `batch` when you need to write data and immediately get fresh rows back, or 
 {
   "action": "batch",
   "token": "...",
+  "formTicket": "FT-c8f9b9f7-062e-4cb8-8c10-8dc4dbfbeeb8",
   "requests": [
     { "action": "compositeSave", "resource": "...", ... },
     { "action": "record", "payload": { "resources": [{ "resource": "...", "codes": [{ "$ref": "Procurements.latest.code" }] }] } },
@@ -71,6 +72,26 @@ Use `batch` when you need to write data and immediately get fresh rows back, or 
 5. Navigate — store is already hot; no second round-trip needed.
 
 **Do NOT use** two separate `callGasApi` calls + `forceSync: true` as a workaround. That is two round-trips and risks a race condition where the view page loads before the second call resolves.
+
+### Form Ticket (FT) Idempotency & Retry Safety
+
+A network drop, a timeout, or an impatient double-click can send the same batch twice. `formTicket` makes that safe: a retried batch never writes an already-written row again.
+
+> **Status:** Backend support is in place and active in `GAS/apiDispatcher.gs`. Frontend `formTicket` wiring is **pending** an upcoming frontend rollout. Today no frontend caller sends a ticket, so every batch takes the untracked path described under **Backward compatible** below. Do not document or rely on client-side ticket behavior until that rollout lands.
+
+**Who will send it.** Once the frontend phase lands, the ticket is meant to be supplied for you, not hand-written:
+- `usePageState.submit()` will hold one ticket per form lifecycle (`state.formTicket`) and regenerate it only after a successful submit, so a failure keeps the same ticket and the retry resumes instead of restarting.
+- `ResourceIoService.runBatchRequests(requests, { formTicket })` will place it into the batch payload.
+- Neither is implemented yet. Add a ticket by hand only for a batch you build yourself that writes rows and could be retried.
+
+**How the engine runs.** `GAS/apiDispatcher.gs` keeps a small state object in `CacheService` under `FT_<formTicket>` (1800s TTL): a FIFO `queue` of step indices, the claimed `processing` index, `completed` step metadata, a `refs` map, and a `lastUpdatedAt` heartbeat. Steps run one at a time, and the heartbeat is restamped after every step.
+- **Finished ticket** → the response is rebuilt from `completed` + `refs` and the delta rows are read fresh at runtime. No sheet write happens.
+- **Still running** (heartbeat under 45s) → the second request polls every 2,500 ms up to 20,000 ms, then answers `inProgress` if the first run is still going.
+- **Dead run** (heartbeat over 45s) → the claimed step goes back to the front of the queue and the arriving request finishes the remaining steps.
+
+**`$ref` under retry and recovery.** Step order is preserved exactly, so `$ref` dependencies still resolve strictly in sequence. Every `$ref` path in the batch is pre-scanned into `refs`, and each code a step produces is written back into that map. On a takeover the map is replayed into the batch context first, so the same `$ref` path walker resolves the codes an earlier, dead run had already created. Note that `refs` stores resolved **string codes** only — a `$ref` pointing at a non-string value works inside one live run but cannot survive a crash.
+
+**Backward compatible.** A batch sent without a `formTicket` runs straight through with no cache read, no cache write, and no polling. There is no global `LockService` lock in either path, so one form never blocks another.
 
 ---
 
