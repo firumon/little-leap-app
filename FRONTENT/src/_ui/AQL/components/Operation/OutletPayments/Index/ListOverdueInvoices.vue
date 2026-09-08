@@ -15,9 +15,9 @@ import { overdueInvoicePreset } from 'src/_ui/AQL/composables/Operation/OutletPa
 
 defineOptions({ name: 'OutletPaymentsListOverdueInvoices', inheritAttrs: false })
 
-const { views, startPayment } = useOutletPaymentIndexContext()
+const { views, filterPayments, startPayment } = useOutletPaymentIndexContext()
 
-const preset = computed(() => overdueInvoicePreset(views.value.OverdueInvoices || []))
+const preset = computed(() => overdueInvoicePreset(filterPayments(views.value.OverdueInvoices || [])))
 
 const onStart = (item) => startPayment(item?.outletCode, item?.code)
 </script>

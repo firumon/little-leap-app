@@ -15,9 +15,9 @@ import { outletDebtPreset } from 'src/_ui/AQL/composables/Operation/OutletPaymen
 
 defineOptions({ name: 'OutletPaymentsListOutlets', inheritAttrs: false })
 
-const { views, startPayment } = useOutletPaymentIndexContext()
+const { views, filterPayments, startPayment } = useOutletPaymentIndexContext()
 
-const preset = computed(() => outletDebtPreset(views.value.Outlets || []))
+const preset = computed(() => outletDebtPreset(filterPayments(views.value.Outlets || [])))
 
 const onStart = (item) => startPayment(item?.code)
 </script>

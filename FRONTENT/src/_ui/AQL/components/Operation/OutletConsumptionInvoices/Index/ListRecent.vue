@@ -17,9 +17,9 @@ import { invoiceRecentRowPreset } from 'src/_ui/AQL/composables/Operation/Outlet
 
 defineOptions({ name: 'OutletConsumptionInvoicesListRecent', inheritAttrs: false })
 
-const { storedViews, openInvoice } = useInvoiceIndexContext()
+const { storedViews, filterInvoices, openInvoice } = useInvoiceIndexContext()
 
-const preset = computed(() => invoiceRecentRowPreset(storedViews.value.Recent))
+const preset = computed(() => invoiceRecentRowPreset(filterInvoices(storedViews.value.Recent)))
 
 const onOpen = (item) => openInvoice(item?.code)
 </script>

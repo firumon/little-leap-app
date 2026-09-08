@@ -1,3 +1,4 @@
+import { computed, inject } from 'vue'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useOutletPaymentIndex } from 'src/_resource/Operation/OutletPayments/composables/useOutletPaymentIndex'
@@ -18,6 +19,14 @@ export function useOutletPaymentIndexContext () {
 
   const index = useOutletPaymentIndex()
 
+  const resourceRecord = inject('resourceRecord', null)
+
+  /**
+   * The live keyword from `FilterInput`. Every list here renders Layer 2 aggregate rows, not
+   * `filteredRecords`, so the framework search never reaches them and each list applies this.
+   */
+  const filterTerm = computed(() => String(resourceRecord?.filterTerm?.value ?? '').trim().toLowerCase())
+
   const sources = ['OutletConsumptionInvoices', 'Outlets']
     .map((name) => useRecord(name))
 
@@ -32,6 +41,16 @@ export function useOutletPaymentIndexContext () {
     loadSources,
     nav,
     views: index.views,
+
+    filterTerm,
+
+    /** Narrow one view's rows by the live keyword. Only the active list pays for a keystroke. */
+    filterPayments: (rows) => {
+      const keyword = filterTerm.value
+      const list = Array.isArray(rows) ? rows : []
+      if (!keyword) return list
+      return list.filter((row) => (row?.search || '').includes(keyword))
+    },
 
     /** Open one payment receipt. */
     openPayment: (code) => {

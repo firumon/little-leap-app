@@ -21,9 +21,9 @@ import { elapsedLabel } from 'src/_ui/AQL/composables/Operation/OutletConsumptio
 
 defineOptions({ name: 'OutletConsumptionInvoicesListOutletPendings', inheritAttrs: false })
 
-const { outletPendings, money } = useInvoiceIndexContext()
+const { outletPendings, filterInvoices, money } = useInvoiceIndexContext()
 
-const rows = computed(() => outletPendings.value.map((entry) => ({
+const rows = computed(() => filterInvoices(outletPendings.value).map((entry) => ({
   outletCode: entry.outletCode,
   outletName: entry.outletName,
   invoiceCount: entry.invoiceCount,

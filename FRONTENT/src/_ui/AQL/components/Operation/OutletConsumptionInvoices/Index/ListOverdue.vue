@@ -17,9 +17,9 @@ import { invoiceDueRowPreset } from 'src/_ui/AQL/composables/Operation/OutletCon
 
 defineOptions({ name: 'OutletConsumptionInvoicesListOverdue', inheritAttrs: false })
 
-const { storedViews, openInvoice } = useInvoiceIndexContext()
+const { storedViews, filterInvoices, openInvoice } = useInvoiceIndexContext()
 
-const preset = computed(() => invoiceDueRowPreset(storedViews.value.Overdue, { chipColor: 'negative' }))
+const preset = computed(() => invoiceDueRowPreset(filterInvoices(storedViews.value.Overdue), { chipColor: 'negative' }))
 
 const onOpen = (item) => openInvoice(item?.code)
 </script>

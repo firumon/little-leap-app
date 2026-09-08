@@ -52,6 +52,9 @@ const num = (value) => {
 }
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+/** One lowercase haystack per row, built here so a keystroke costs one `includes`. */
+const haystack = (...parts) => parts.map(text).filter(Boolean).join(' ').toLowerCase()
+
 const isActiveRow = (row) => {
   const status = text(asRow(row).Status)
   return !status || status.toUpperCase() === 'ACTIVE'
@@ -189,7 +192,16 @@ const shared = defineSharedComposable((dataStore) => {
         // Negative once the due date has passed. `null` when no due date was set, which is
         // NOT the same as "due today" and must not be banded as overdue.
         dueInDays: dueIn,
-        isOverdue: dueIn !== null && dueIn < 0 && isOpen(invoice)
+        isOverdue: dueIn !== null && dueIn < 0 && isOpen(invoice),
+        search: haystack(
+          code,
+          outletCode,
+          names.get(outletCode) || outletCode,
+          text(invoice.Date),
+          text(invoice.DueDate),
+          text(invoice.Username),
+          progressOf(invoice)
+        )
       }
     })
   })
@@ -351,7 +363,8 @@ const shared = defineSharedComposable((dataStore) => {
         invoiceCount: 0,
         balance: 0,
         oldestDate: '',
-        overdueCount: 0
+        overdueCount: 0,
+        search: haystack(row.outletCode, names.get(row.outletCode) || row.outletCode)
       }
       entry.invoiceCount += 1
       entry.balance += row.balance
@@ -381,6 +394,7 @@ const shared = defineSharedComposable((dataStore) => {
       }
       entry.consumptionCount += 1
       entry.consumptionCodes.push(text(row.Code))
+      entry.search = haystack(code, entry.outletName, entry.consumptionCodes.join(' '))
       const date = text(row.Date)
       if (date && (!entry.oldestDate || date < entry.oldestDate)) entry.oldestDate = date
       byOutlet.set(code, entry)

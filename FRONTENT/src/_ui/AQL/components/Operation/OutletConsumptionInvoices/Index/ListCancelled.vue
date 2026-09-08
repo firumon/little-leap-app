@@ -25,9 +25,9 @@ import { settledRowPreset } from 'src/_ui/AQL/composables/Operation/OutletConsum
 
 defineOptions({ name: 'OutletConsumptionInvoicesListCancelled', inheritAttrs: false })
 
-const { storedViews, openInvoice } = useInvoiceIndexContext()
+const { storedViews, filterInvoices, openInvoice } = useInvoiceIndexContext()
 
-const preset = computed(() => settledRowPreset(storedViews.value.Cancelled))
+const preset = computed(() => settledRowPreset(filterInvoices(storedViews.value.Cancelled)))
 
 const onOpen = (item) => openInvoice(item?.code)
 </script>

@@ -15,9 +15,9 @@ import { paymentRowPreset } from 'src/_ui/AQL/composables/Operation/OutletPaymen
 
 defineOptions({ name: 'OutletPaymentsListRecent', inheritAttrs: false })
 
-const { views, openPayment } = useOutletPaymentIndexContext()
+const { views, filterPayments, openPayment } = useOutletPaymentIndexContext()
 
-const preset = computed(() => paymentRowPreset(views.value.Recent || []))
+const preset = computed(() => paymentRowPreset(filterPayments(views.value.Recent || [])))
 
 const onOpen = (item) => openPayment(item?.code)
 </script>

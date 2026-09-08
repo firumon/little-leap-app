@@ -1,4 +1,4 @@
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
@@ -36,6 +36,14 @@ export function useInvoiceIndexContext () {
   const { _C } = useCurrencyResource()
 
   const index = useInvoiceIndex()
+
+  const resourceRecord = inject('resourceRecord', null)
+
+  /**
+   * The live keyword from `FilterInput`. Every list here renders Layer 2 aggregate rows, not
+   * `filteredRecords`, so the framework search never reaches them and each list applies this.
+   */
+  const filterTerm = computed(() => String(resourceRecord?.filterTerm?.value ?? '').trim().toLowerCase())
 
   /**
    * The resources this page reads BESIDES its own.
@@ -75,6 +83,16 @@ export function useInvoiceIndexContext () {
     outletPendings: index.outletPendings,
     invoiceableOutlets: index.invoiceableOutlets,
     storedViews: index.storedViews,
+
+    filterTerm,
+
+    /** Narrow one view's rows by the live keyword. Only the active list pays for a keystroke. */
+    filterInvoices: (rows) => {
+      const keyword = filterTerm.value
+      const list = Array.isArray(rows) ? rows : []
+      if (!keyword) return list
+      return list.filter((row) => (row?.search || '').includes(keyword))
+    },
 
     canCreate: computed(() => canCreateInvoice()),
 

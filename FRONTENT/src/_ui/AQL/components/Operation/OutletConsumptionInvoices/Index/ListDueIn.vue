@@ -17,9 +17,9 @@ import { invoiceDueRowPreset } from 'src/_ui/AQL/composables/Operation/OutletCon
 
 defineOptions({ name: 'OutletConsumptionInvoicesListDueIn', inheritAttrs: false })
 
-const { storedViews, openInvoice } = useInvoiceIndexContext()
+const { storedViews, filterInvoices, openInvoice } = useInvoiceIndexContext()
 
-const preset = computed(() => invoiceDueRowPreset(storedViews.value.DueIn, { short: true }))
+const preset = computed(() => invoiceDueRowPreset(filterInvoices(storedViews.value.DueIn), { short: true }))
 
 const onOpen = (item) => openInvoice(item?.code)
 </script>

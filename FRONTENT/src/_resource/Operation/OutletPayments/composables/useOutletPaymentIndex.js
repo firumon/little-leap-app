@@ -18,6 +18,9 @@ const num = (value) => {
 }
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+/** One lowercase haystack per row, built here so a keystroke costs one `includes`. */
+const haystack = (...parts) => parts.map(text).filter(Boolean).join(' ').toLowerCase()
+
 const isActiveRow = (row) => {
   const status = text(asRow(row).Status)
   return !status || status.toUpperCase() === 'ACTIVE'
@@ -98,7 +101,16 @@ const shared = defineSharedComposable((dataStore) => {
           ageDays: daysSince(inv.Date),
           dueInDays: dueIn,
           isOverdue: dueIn !== null && dueIn < 0 && isInvoiceOpen,
-          isOpen: isInvoiceOpen
+          isOpen: isInvoiceOpen,
+          search: haystack(
+            code,
+            outletCode,
+            names.get(outletCode) || outletCode,
+            text(inv.Date),
+            text(inv.DueDate),
+            text(inv.Username),
+            invProgress
+          )
         }
       })
   })
@@ -127,7 +139,18 @@ const shared = defineSharedComposable((dataStore) => {
         progress: pProgress,
         isSubmitted: isSubmitted(p),
         isCancelled: pProgress === CANCELLED,
-        ageDays: daysSince(p.Date)
+        ageDays: daysSince(p.Date),
+        search: haystack(
+          code,
+          outletCode,
+          names.get(outletCode) || outletCode,
+          invoiceCode,
+          text(p.Date),
+          text(p.Mode) || 'Cash',
+          text(p.Reference),
+          text(p.Username),
+          pProgress
+        )
       }
     })
   })
@@ -206,7 +229,14 @@ const shared = defineSharedComposable((dataStore) => {
       if (!code) return
       let entry = map.get(code)
       if (!entry) {
-        entry = { code, name: inv.outletName || code, totalBalance: 0, invoiceCount: 0, invoices: [] }
+        entry = {
+          code,
+          name: inv.outletName || code,
+          totalBalance: 0,
+          invoiceCount: 0,
+          invoices: [],
+          search: haystack(code, inv.outletName || code)
+        }
         map.set(code, entry)
       }
       entry.totalBalance += inv.balance

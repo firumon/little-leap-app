@@ -31,9 +31,9 @@ import { useInvoiceIndexContext } from 'src/_ui/AQL/composables/Operation/Outlet
 
 defineOptions({ name: 'OutletConsumptionInvoicesListInvoiceable', inheritAttrs: false })
 
-const { invoiceableOutlets, canCreate, startInvoice } = useInvoiceIndexContext()
+const { invoiceableOutlets, filterInvoices, canCreate, startInvoice } = useInvoiceIndexContext()
 
-const rows = computed(() => invoiceableOutlets.value.map((entry) => ({
+const rows = computed(() => filterInvoices(invoiceableOutlets.value).map((entry) => ({
   outletCode: entry.outletCode,
   label: entry.outletName,
   caption: `Consumptions: ${entry.consumptionCount}`

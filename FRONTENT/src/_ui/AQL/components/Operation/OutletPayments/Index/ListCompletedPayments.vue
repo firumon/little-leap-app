@@ -15,9 +15,9 @@ import { paymentRowPreset } from 'src/_ui/AQL/composables/Operation/OutletPaymen
 
 defineOptions({ name: 'OutletPaymentsListCompletedPayments', inheritAttrs: false })
 
-const { views, openPayment } = useOutletPaymentIndexContext()
+const { views, filterPayments, openPayment } = useOutletPaymentIndexContext()
 
-const preset = computed(() => paymentRowPreset(views.value.CompletedPayments || []))
+const preset = computed(() => paymentRowPreset(filterPayments(views.value.CompletedPayments || [])))
 
 const onOpen = (item) => openPayment(item?.code)
 </script>
