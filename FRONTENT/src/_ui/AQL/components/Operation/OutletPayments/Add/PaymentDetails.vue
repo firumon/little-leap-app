@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isActive" :class="gutterClass">
+  <div v-if="showDetails" :class="gutterClass">
     <SectionDividerLabel label="AMOUNT COLLECTED" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -13,23 +13,6 @@
           @update:model-value="(value) => (amount = value)"
         />
 
-        <!-- QUICK TAPS, not a convenience. A collector standing in an outlet is typing on a
-             phone with one hand; the four amounts below cover almost every real collection,
-             and each one re-splits the allocation grid as it lands. -->
-        <div class="row " :class="'q-col-gutter-' + (attrs.gutter || 'sm') + ` q-mt-` + (attrs.gutter || 'sm')">
-          <div v-for="tap in quickTaps" :key="tap.key" class="col-6 col-sm-3">
-            <q-btn
-              outline no-caps
-              color="primary"
-              class="full-width"
-              :label="tap.label"
-              :style="ui.tapTargetStyle"
-              @click="tap.apply"
-            >
-              <q-tooltip>{{ tap.hint }}</q-tooltip>
-            </q-btn>
-          </div>
-        </div>
       </q-card-section>
     </q-card>
 
@@ -170,9 +153,9 @@
 
 <script setup>
 /**
- * OutletPayments › Add › Step 2 — how much was taken, how it splits, and how it arrived.
+ * OutletPayments › Add — how much was taken, how it splits, and how it arrived.
  *
- * ── THE SPLIT IS THE POINT OF THIS STEP ──
+ * ── THE SPLIT IS THE POINT OF THIS FORM ──
  * One collection settling three invoices is three payment rows and three invoice transitions,
  * and which invoice gets which share decides which of them closes. The default is OLDEST
  * FIRST, applied by `autoDistribute` in Layer 2 rather than here, because "settle the oldest
@@ -188,8 +171,7 @@
  * sentence it will store is shown before it is stored.
  *
  * Every field mounts through `resolveFieldComponent` (§2.4) and NOTHING here is `dense` —
- * these are the primary inputs of the step, including the per-invoice allocation cells. The
- * quick-tap buttons bind `ui.tapTargetStyle` so they stay reliably tappable on a phone.
+ * these are the primary inputs of the form, including the per-invoice allocation cells.
  *
  * Spacing is `pageProps.gutter` throughout, never a hardcoded margin (§10.2).
  *
@@ -202,10 +184,6 @@ import { useOutletPaymentAddContext } from 'src/_ui/AQL/composables/Operation/Ou
 
 defineOptions({ name: 'OutletPaymentsAddPaymentDetails', inheritAttrs: false })
 
-const props = defineProps({
-  step: { type: [Number, String], default: 2 }
-})
-
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
@@ -217,15 +195,14 @@ const {
   ui, money, MODE_OPTIONS, waiverReasons,
   amount, allocations, setAllocation, distribute,
   totalAllocated, allocationDiff, reconcileToAllocations,
-  selectedInvoices, selectedBalance, outletBalance, outletInvoices, setSelectedCodes,
+  selectedInvoices,
   mode, reference,
   waiveResidual, waiverReason, waiverComment,
   canWaiveResidual, residualBalance, waiverLimit, waiverAuditComment,
-  step: currentStep
+  outletCode, selectedCodes
 } = useOutletPaymentAddContext()
 
-const isActive = computed(() =>
-  props.step == null || Number(props.step) === currentStep.value)
+const showDetails = computed(() => outletCode.value && selectedCodes.value.length > 0)
 
 /**
  * `q-toggle` needs a writable model. The context exposes a writable computed already, but
@@ -237,41 +214,4 @@ const waiveModel = computed({
   set: (value) => { waiveResidual.value = value }
 })
 
-/**
- * The four amounts that cover almost every real collection.
- *
- * "Full outstanding" widens the selection to every open invoice first — it is the "they paid
- * off everything" case, and leaving the tick list behind would produce an amount the
- * allocation grid could not absorb. "Selected balance" is the same gesture scoped to what is
- * already ticked, which is how a partial settlement is reset after experimenting.
- */
-const quickTaps = computed(() => [
-  {
-    key: 'full',
-    label: 'Full outstanding',
-    hint: 'Everything this outlet owes, across every open invoice',
-    apply: () => {
-      setSelectedCodes(outletInvoices.value.map((row) => row.code))
-      amount.value = outletBalance.value
-    }
-  },
-  {
-    key: 'selected',
-    label: 'Selected balance',
-    hint: 'What the invoices selected on the previous step still owe',
-    apply: () => { amount.value = selectedBalance.value }
-  },
-  {
-    key: 'half',
-    label: '50%',
-    hint: 'Half of the selected balance',
-    apply: () => { amount.value = Number((selectedBalance.value * 0.5).toFixed(2)) }
-  },
-  {
-    key: 'quarter',
-    label: '25%',
-    hint: 'A quarter of the selected balance',
-    apply: () => { amount.value = Number((selectedBalance.value * 0.25).toFixed(2)) }
-  }
-])
 </script>

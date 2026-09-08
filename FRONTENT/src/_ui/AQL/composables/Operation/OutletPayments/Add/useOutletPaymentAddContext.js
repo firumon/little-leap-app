@@ -459,8 +459,6 @@ export function useOutletPaymentAddContext () {
     collectorName,
     collectionDate,
 
-    outletNameOf: (code) => index.outletNameByCode.value.get(text(code)) || text(code),
-
-    step: computed(() => pageState?.meta?.currentStep || 1)
+    outletNameOf: (code) => index.outletNameByCode.value.get(text(code)) || text(code)
   }
 }

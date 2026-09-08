@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isActive" :class="gutterClass">
+  <div v-if="showReview" :class="gutterClass">
     <SectionDividerLabel label="RECEIPT" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -71,15 +71,15 @@
 
 <script setup>
 /**
- * OutletPayments › Add › Step 3 — the receipt as it will be written.
+ * OutletPayments › Add — the receipt as it will be written.
  *
- * ── WHY THIS STEP EXISTS AT ALL ──
+ * ── WHY THIS RECEIPT EXISTS ──
  * A collection is irreversible in practice: undoing one means a cancellation receipt and a
  * reverted invoice, both of which stay on the record. So the last thing before committing is a
  * statement of what will happen — not a summary of what was typed, which the user just typed
  * and does not need repeated.
  *
- * The line that earns the step is `outcome`: which invoices this payment CLOSES. It is derived
+ * The key receipt line is `outcome`: which invoices this payment CLOSES. It is derived
  * in the page context from the same allocation-versus-balance comparison
  * `buildOutletPaymentCreationNodes` uses to choose between `MarkPaid` and
  * `MarkPartiallyPaid`, so the transition shown and the transition written are one decision.
@@ -95,10 +95,6 @@ import { useOutletPaymentAddContext } from 'src/_ui/AQL/composables/Operation/Ou
 
 defineOptions({ name: 'OutletPaymentsAddPaymentReview', inheritAttrs: false })
 
-const props = defineProps({
-  step: { type: [Number, String], default: 3 }
-})
-
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
@@ -106,11 +102,10 @@ const {
   ui, money, amount, mode, reference, outletCode, outletNameOf,
   receiptLines, collectorName, collectionDate,
   waiveResidual, residualBalance, waiverComment, waiverAuditComment,
-  step: currentStep
+  selectedCodes
 } = useOutletPaymentAddContext()
 
-const isActive = computed(() =>
-  props.step == null || Number(props.step) === currentStep.value)
+const showReview = computed(() => outletCode.value && selectedCodes.value.length > 0)
 
 const details = computed(() => {
   const lines = [

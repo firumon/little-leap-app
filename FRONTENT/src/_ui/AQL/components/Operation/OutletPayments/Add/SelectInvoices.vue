@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isActive" :class="gutterClass">
+  <div :class="gutterClass">
     <SectionDividerLabel label="OUTLET" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -122,12 +122,6 @@ import { dueText } from 'src/_ui/AQL/composables/Operation/OutletPayments/Index/
 
 defineOptions({ name: 'OutletPaymentsAddSelectInvoices', inheritAttrs: false })
 
-// Which wizard step this card belongs to. A prop rather than a hardcoded number, so the page
-// contract owns the running order.
-const props = defineProps({
-  step: { type: [Number, String], default: 1 }
-})
-
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
@@ -136,7 +130,7 @@ const SelectField = resolveFieldComponent('select', 'add')
 const {
   ui, money, outletCode, outletOptions, outletInvoices, outletBalance,
   selectedCodes, selectedBalance, isAllSelected,
-  toggleInvoice, toggleSelectAll, step: currentStep,
+  toggleInvoice, toggleSelectAll,
   initNode, loadSources, reseedAmount
 } = useOutletPaymentAddContext()
 
@@ -144,10 +138,7 @@ const pickInvoice = (code) => toggleInvoice(code)
 const pickAll = () => toggleSelectAll()
 const pickOutlet = (value) => { outletCode.value = value }
 
-const isActive = computed(() =>
-  props.step == null || Number(props.step) === currentStep.value)
-
-// Step 1 always mounts first, so it creates the page node the sticky bar is gated on, then
+// This card always mounts first, so it creates the page node the sticky bar validates, then
 // fetches. `reseedAmount` fills the default a seeded invoice could not supply while the
 // aggregate was still empty.
 onMounted(async () => {
