@@ -59,10 +59,11 @@ export function invoiceDueRowPreset (rows = [], { short = false, chipColor = 'pr
     items: Array.isArray(rows) ? rows : [],
     itemKey: 'code',
 
-    layout: ['caption', 'label', 'caption'],
+    layout: ['caption', 'label', 'caption', 'caption'],
     content: [
-      (row) => dateAndUser(row),
       (row) => text(row.code),
+      (row) => text(row.outletName) || text(row.outletCode),
+      (row) => dateAndUser(row),
       (row) => `Payable: ${_C(row.balance, true)}`
     ],
 
@@ -81,10 +82,11 @@ export function invoiceRecentRowPreset (rows = []) {
     items: Array.isArray(rows) ? rows : [],
     itemKey: 'code',
 
-    layout: ['caption', 'label'],
+    layout: ['caption', 'label', 'caption'],
     content: [
-      (row) => dateAndUser(row),
-      (row) => text(row.code)
+      (row) => text(row.code),
+      (row) => text(row.outletName) || text(row.outletCode),
+      (row) => dateAndUser(row)
     ],
 
     metaLayout: ['label', 'caption'],
