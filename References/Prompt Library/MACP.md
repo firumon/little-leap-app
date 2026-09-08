@@ -176,13 +176,72 @@ The Builder should **not** paste full file contents, large diffs, or line-by-lin
 
 ### 4.1.2 Same-Session Continuation Directives (Lean & Task-Focused)
 
-When related tasks or iterative steps are executed within the **same continuous chat session** of the Building Agent:
+When related tasks or iterative steps are executed within the **same continuous chat session** of the Building Agent, the directive is a **delta, not a document**. The Builder already holds the tier, the protocol, the language rule, and the brief format from turn 1. Repeating them wastes tokens and tires the Human Conductor.
 
-* **No Redundant Boilerplate**: Do NOT restate protocol introductions, MACP preambles, capability tiers, or repeated report-back instructions already established in earlier turns.
-* **Resume Exactly Where the Builder Stopped**: Directives should seamlessly pick up from the Builder's last completed state.
-* **Answer Builder Queries First**: If the Building Agent concluded with questions, blockers, or requested decisions, the Architect must gather the Human Conductor's input during the discussion phase and directly answer those questions at the top of the next directive before issuing the new task.
-* **Minimal & Point-Oriented**: Keep follow-up directives lean, outcome-driven, and strictly focused on the immediate delta or task. Avoid repeating already-settled context or code specifications.
-* **High-Tier Lean Follow-ups**: For a High Capability tier, follow-up directives must be strictly outcome- and intent-driven. Do NOT supply micro-level code snippets or line-by-line implementations. State the target, intent, and expected outcome, leaving code decisions to the Builder.
+**Before formatting any directive, the Architect must first decide: is this the session's initial directive, or a follow-up?** Initial directives use §4.1. Follow-ups use the contract below, with no exceptions.
+
+#### A. Negative Constraint Checklist (STRICT BANS)
+
+A same-session follow-up directive must **NEVER** contain any of the following:
+
+* ❌ A `# Directive Prompt — <Title>` top-level header, or any title banner.
+* ❌ A `## Capability Tier: <Tier>` declaration, or any restatement of the tier.
+* ❌ Full section ceremonies: `## Intent & Purpose`, `## Context`, `## Problem Statement`, `## Target Scope`, `## Target File(s)`, `## Constraints & Guardrails`, `## Expected Outcomes` as formal headed sections.
+* ❌ A `## Report-Back Brief` instruction block, or any restatement of the brief structure — the Builder learned it in turn 1.
+* ❌ Restatements of the Simple English rule, the Token Conservation rule, or any other MACP protocol rule.
+* ❌ Re-listing already-settled context, prior file specs, or code already written in earlier turns.
+* ❌ Sign-offs, closing lines, or "let me know when done" style footers.
+
+#### B. Positive Structural Contract
+
+A follow-up directive consists **only** of:
+
+1. `### Task: <Name>` — the starting header. Nothing above it.
+2. **Answers to the Builder's open queries or blockers** — only if the Builder raised any in its last brief. Short, direct, decision-first.
+3. **Target files/symbols and the immediate delta** — what must change now, and the expected outcome of that change.
+4. **Minimal constraints specific to this delta only** — inline bullets, not a headed ceremony section. Omit entirely if there are none.
+
+For **High** tier follow-ups, keep it outcome- and intent-driven. State the target, the intent, and the expected result. Do not supply code snippets or line-by-line implementation.
+
+#### C. Side-by-Side Examples
+
+**❌ Forbidden Anti-Pattern** (verbose, redundant, boilerplate-heavy):
+
+```markdown
+# Directive Prompt — Add Keyword Filter to Payments List
+
+## Capability Tier: High
+
+## 1. Context & Architectural Rationale
+As established earlier, the payments list needs ...
+
+## 2. Target Files
+- `FRONTENT/src/_ui/.../usePaymentFilters.js`
+
+## 3. Constraints & Guardrails
+1. Follow the 3-Layer UI import boundary.
+2. Conserve tokens.
+
+## 4. Report-Back Brief Requirement
+- Write your brief in very simple, easy English.
+- 📁 Files Modified, 💡 Summary, ⚠️ Deviations.
+```
+
+**✅ Compliant Follow-Up Directive** (lean, delta-focused, zero boilerplate):
+
+```markdown
+### Task: Add Keyword Filter to Payments List
+
+**Your queries:**
+- Debounce: yes, 300ms.
+- Case sensitivity: no, match case-insensitive.
+
+Extend the payments list filter to accept a free-text keyword.
+It must match against payment reference, outlet name, and note.
+
+- Keep the existing view/token filters working alongside it.
+- Empty keyword must return the unfiltered list.
+```
 
 ### 4.2 Analysis & Proposal (Architect → Human)
 
@@ -223,7 +282,9 @@ What must still hold, regardless of shape:
 9. **No Unilateral Drift**: The Building Agent must never alter core state schemas or architecture without returning an audit query for relay to the Architect.
 10. **Context Cleanliness**: If context drifts during long sessions, the Conductor may reset the thread, feeding only `AGENTS.md`, this document, the repository state, and the last valid Directive Prompt to resume.
 11. **Same-Session Continuation Rule (STRICT)**: When tasks or iterative follow-ups occur within the same active chat session of the Building Agent:
-    * Do not repeat protocol introductions, capability tier headers, or brief format instructions already established in the session.
+    * **Check the turn type first.** Before formatting any output, the Architect must determine whether this is the session's **initial** directive or a **follow-up**. Initial directives follow §4.1; follow-ups follow the strict contract in §4.1.2.
+    * **Repeating protocol introductions, title banners (`# Directive Prompt — ...`), capability tier declarations (`## Capability Tier: ...`), formal ceremony sections, or report-back brief instructions in a follow-up directive is an explicit protocol violation.** These are not stylistic preferences. They are banned.
+    * Follow-ups start at `### Task: <Name>` and carry only: answers to the Builder's open queries, the target files/symbols and the immediate delta, and any minimal constraints unique to that delta.
     * Resume directly from where the Building Agent stopped.
     * If the Building Agent concluded by asking questions or reporting blockers, the Architect must gather the Conductor's decisions during discussion and directly answer those questions before stating the new task.
     * Directives must be strictly minimal, point-oriented, and task-focused.
