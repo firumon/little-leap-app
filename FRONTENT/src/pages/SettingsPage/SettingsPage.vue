@@ -107,7 +107,10 @@
             <div class="col-12 col-sm-4">
               <div class="info-tile">
                 <div class="text-caption text-grey-7">Version</div>
-                <div class="text-body1 text-weight-bold text-grey-9">v{{ currentVersion }}</div>
+                <div class="text-body1 text-weight-bold text-grey-9">
+                  v{{ currentVersion }}
+                  <span v-if="remoteVersion && remoteVersion !== currentVersion" class="text-warning">→ v{{ remoteVersion }}</span>
+                </div>
               </div>
             </div>
             <div class="col-12 col-sm-4">
@@ -125,11 +128,16 @@
           <div class="row items-center justify-between q-col-gutter-md">
             <div class="col-12 col-sm">
               <div class="text-body2 text-weight-medium text-grey-9">
-                {{ updateAvailable ? 'A new version is ready' : 'Software update' }}
+                <template v-if="updateAvailable">A new version is ready</template>
+                <template v-else-if="isDownloading">Downloading the new version</template>
+                <template v-else>Software update</template>
               </div>
               <div class="text-caption text-grey-7">
                 <template v-if="updateAvailable">
-                  Download and reload now to use the latest version.
+                  Reload now to use the latest version.
+                </template>
+                <template v-else-if="isDownloading">
+                  Please wait. All files must finish downloading first.
                 </template>
                 <template v-else>
                   Last checked: {{ lastCheckedLabel }}
@@ -138,7 +146,28 @@
             </div>
             <div class="col-12 col-sm-auto">
               <q-btn
-                v-if="!updateAvailable"
+                v-if="updateAvailable"
+                padding="sm"
+                color="warning"
+                text-color="white"
+                icon="restart_alt"
+                label="Reload to Apply"
+                :loading="isUpdating"
+                class="full-width-xs"
+                @click="applyUpdate"
+              />
+              <q-btn
+                v-else-if="isDownloading"
+                padding="sm"
+                color="info"
+                icon="cloud_download"
+                label="Downloading update…"
+                loading
+                disable
+                class="full-width-xs"
+              />
+              <q-btn
+                v-else
                 padding="sm"
                 color="primary"
                 icon="refresh"
@@ -146,17 +175,6 @@
                 :loading="isChecking"
                 class="full-width-xs"
                 @click="checkForUpdate"
-              />
-              <q-btn
-                v-else
-                padding="sm"
-                color="warning"
-                text-color="white"
-                icon="download"
-                label="Download & Reload"
-                :loading="isUpdating"
-                class="full-width-xs"
-                @click="applyUpdate"
               />
             </div>
           </div>
@@ -191,6 +209,7 @@ const {
   isSupported,
   isRegistered,
   isChecking,
+  isDownloading,
   isUpdating,
   updateAvailable,
   lastError,
@@ -199,6 +218,7 @@ const {
   buildTimeLabel,
   appName,
   currentVersion,
+  remoteVersion,
   checkForUpdate,
   applyUpdate
 } = usePwaUpdate()

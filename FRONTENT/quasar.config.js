@@ -2,9 +2,11 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
+const BUILD_TIME = new Date().toISOString()
 
 export default defineConfig((/* ctx */) => {
   return {
@@ -57,13 +59,18 @@ export default defineConfig((/* ctx */) => {
       env: {
         APP_NAME: pkg.productName,
         APP_VERSION: pkg.version,
-        BUILD_TIME: new Date().toISOString()
+        BUILD_TIME
       },
       // rawDefine: {}
       // ignorePublicFolder: true,
       // minify: false,
       // polyfillModulePreload: true,
       // distDir
+
+      afterBuild ({ quasarConf }) {
+        const manifest = { version: pkg.version, buildTime: BUILD_TIME }
+        writeFileSync(join(quasarConf.build.distDir, 'version.json'), JSON.stringify(manifest), 'utf-8')
+      },
 
       // extendViteConf (viteConf) {},
       // viteVuePluginOptions: {},

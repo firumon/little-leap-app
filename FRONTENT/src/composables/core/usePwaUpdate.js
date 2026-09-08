@@ -1,31 +1,35 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useQuasar } from 'quasar'
 
-const CHECK_SETTLE_MS = 1500
+const APPLY_FALLBACK_MS = 15000
 
 export function usePwaUpdate () {
   const $q = useQuasar()
 
   const isSupported = ref(typeof navigator !== 'undefined' && 'serviceWorker' in navigator)
   const isChecking = ref(false)
+  const isDownloading = ref(false)
   const isUpdating = ref(false)
   const updateAvailable = ref(false)
   const isRegistered = ref(false)
   const lastCheckedAt = ref(null)
   const lastError = ref('')
+  const remoteVersion = ref('')
 
   const currentVersion = process.env.APP_VERSION || 'dev'
   const appName = process.env.APP_NAME || 'AQL'
   const buildTime = process.env.BUILD_TIME || ''
 
   let registration = null
-  let reloading = false
+  let applying = false
+  let applyTimer = null
   let listenersBound = false
 
   const status = computed(() => {
     if (!isSupported.value) return { label: 'Not supported', color: 'grey-6', icon: 'block' }
-    if (isUpdating.value) return { label: 'Updating', color: 'orange', icon: 'sync' }
+    if (isUpdating.value) return { label: 'Applying', color: 'orange', icon: 'sync' }
     if (updateAvailable.value) return { label: 'Update ready', color: 'warning', icon: 'system_update_alt' }
+    if (isDownloading.value) return { label: 'Downloading', color: 'info', icon: 'cloud_download' }
     if (isChecking.value) return { label: 'Checking', color: 'info', icon: 'sync' }
     if (isRegistered.value) return { label: 'Active', color: 'positive', icon: 'verified' }
     return { label: 'Inactive', color: 'grey-6', icon: 'cloud_off' }
@@ -38,18 +42,24 @@ export function usePwaUpdate () {
 
   const buildTimeLabel = computed(() => (buildTime ? new Date(buildTime).toLocaleString() : '—'))
 
-  function markAvailable () {
+  function markReady () {
+    isDownloading.value = false
     updateAvailable.value = true
   }
 
   function watchWorker (worker) {
     if (!worker) return
-    if (worker.state === 'installed' || worker.state === 'activated') {
-      if (navigator.serviceWorker.controller) markAvailable()
-      return
-    }
+
+    // A first install has no controller, so it is not an update the user must apply.
+    if (!navigator.serviceWorker.controller) return
+
+    if (worker.state === 'installing') isDownloading.value = true
+    if (worker.state === 'installed') markReady()
+
     worker.addEventListener('statechange', () => {
-      if (worker.state === 'installed' && navigator.serviceWorker.controller) markAvailable()
+      if (worker.state === 'installing') isDownloading.value = true
+      else if (worker.state === 'installed') markReady()
+      else if (worker.state === 'redundant') isDownloading.value = false
     })
   }
 
@@ -58,7 +68,7 @@ export function usePwaUpdate () {
     isRegistered.value = !!reg
     if (!reg) return
 
-    if (reg.waiting && navigator.serviceWorker.controller) markAvailable()
+    if (reg.waiting) markReady()
     watchWorker(reg.installing)
 
     reg.addEventListener('updatefound', () => watchWorker(reg.installing))
@@ -66,12 +76,24 @@ export function usePwaUpdate () {
 
   function onSwUpdated (event) {
     if (event.detail) registration = event.detail
-    markAvailable()
+    markReady()
   }
 
   function onControllerChange () {
-    if (!reloading) return
+    if (!applying) return
+    applying = false
+    if (applyTimer) clearTimeout(applyTimer)
     window.location.reload()
+  }
+
+  async function fetchRemoteVersion () {
+    try {
+      const response = await fetch(`/version.json?_t=${Date.now()}`, { cache: 'no-store' })
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      return null
+    }
   }
 
   async function checkForUpdate () {
@@ -97,16 +119,23 @@ export function usePwaUpdate () {
     $q.notify({ message: 'Checking for updates…', color: 'info', icon: 'sync', position: 'top', timeout: 1200 })
 
     try {
+      const remote = await fetchRemoteVersion()
+      remoteVersion.value = remote?.version || ''
+
       await registration.update()
-      await new Promise(resolve => setTimeout(resolve, CHECK_SETTLE_MS))
       lastCheckedAt.value = Date.now()
 
-      if (registration.waiting || registration.installing) markAvailable()
+      if (registration.waiting) markReady()
+      else if (registration.installing) watchWorker(registration.installing)
 
-      if (!updateAvailable.value) {
-        $q.notify({ message: 'App is up to date.', color: 'positive', icon: 'check_circle', position: 'top' })
-      } else {
+      if (updateAvailable.value) {
         $q.notify({ message: 'A new version is ready to install.', color: 'warning', icon: 'system_update_alt', position: 'top' })
+      } else if (isDownloading.value) {
+        $q.notify({ message: 'Downloading the new version…', color: 'info', icon: 'cloud_download', position: 'top' })
+      } else if (remoteVersion.value && remoteVersion.value !== currentVersion) {
+        $q.notify({ message: `Version ${remoteVersion.value} is on the server. Files are still being fetched.`, color: 'info', icon: 'info', position: 'top' })
+      } else {
+        $q.notify({ message: 'App is up to date.', color: 'positive', icon: 'check_circle', position: 'top' })
       }
     } catch (error) {
       lastError.value = error?.message || 'Update check failed.'
@@ -120,18 +149,24 @@ export function usePwaUpdate () {
     if (!updateAvailable.value || isUpdating.value) return
 
     isUpdating.value = true
-    reloading = true
+    applying = true
 
     try {
       if (!registration) registration = await navigator.serviceWorker.getRegistration()
-      const worker = registration?.waiting || registration?.installing
-      if (worker) worker.postMessage({ type: 'SKIP_WAITING' })
+      const worker = registration?.waiting
+      if (!worker) throw new Error('The new version is not ready yet. Please check again.')
 
-      // A new worker that self-claims never fires controllerchange, so reload anyway.
-      setTimeout(() => { window.location.reload() }, 1200)
+      worker.postMessage({ type: 'SKIP_WAITING' })
+
+      // Some browsers activate without firing controllerchange, so reload anyway.
+      applyTimer = setTimeout(() => {
+        if (!applying) return
+        applying = false
+        window.location.reload()
+      }, APPLY_FALLBACK_MS)
     } catch (error) {
       isUpdating.value = false
-      reloading = false
+      applying = false
       lastError.value = error?.message || 'Could not apply the update.'
       $q.notify({ message: lastError.value, color: 'negative', icon: 'error', position: 'top' })
     }
@@ -148,6 +183,7 @@ export function usePwaUpdate () {
   })
 
   onBeforeUnmount(() => {
+    if (applyTimer) clearTimeout(applyTimer)
     if (!listenersBound) return
     document.removeEventListener('swUpdated', onSwUpdated)
     navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
@@ -157,6 +193,7 @@ export function usePwaUpdate () {
     isSupported,
     isRegistered,
     isChecking,
+    isDownloading,
     isUpdating,
     updateAvailable,
     lastError,
@@ -166,6 +203,7 @@ export function usePwaUpdate () {
     buildTimeLabel,
     appName,
     currentVersion,
+    remoteVersion,
     checkForUpdate,
     applyUpdate
   }

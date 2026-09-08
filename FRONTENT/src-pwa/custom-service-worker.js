@@ -1,11 +1,5 @@
 /* eslint-env serviceworker */
 
-/*
- * This file (which will be your service worker)
- * is picked up by the build system ONLY if
- * quasar.config file > pwa > workboxMode is set to "InjectManifest"
- */
-
 import './idb-compat'
 import { clientsClaim } from 'workbox-core'
 import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching'
@@ -56,7 +50,6 @@ function getDB() {
   return swDbPromise
 }
 
-self.skipWaiting()
 clientsClaim()
 
 // Use with precache injection
@@ -201,14 +194,6 @@ registerRoute(
         maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
       }),
     ],
-  })
-)
-
-// Cache CSS and JavaScript files
-registerRoute(
-  ({ request }) => request.destination === 'script' || request.destination === 'style',
-  new StaleWhileRevalidate({
-    cacheName: 'static-resources',
   })
 )
 
