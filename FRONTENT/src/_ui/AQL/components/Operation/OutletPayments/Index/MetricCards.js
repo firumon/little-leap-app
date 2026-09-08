@@ -28,13 +28,11 @@ export default function () {
         {
           label: overdue.count > 0 ? `Overdue Invoices (${overdue.count})` : 'Overdue Invoices',
           number: _C(overdue.amount, true),
-          unit: overdue.count ? `${overdue.count} inv` : '',
           color: overdue.count > 0 ? 'negative' : 'positive'
         },
         {
           label: 'Collected Today',
           number: _C(today.amount, true),
-          unit: today.count ? `${today.count} pymt${today.count > 1 ? 's' : ''}` : '',
           color: 'teal-7'
         }
       ]
