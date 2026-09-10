@@ -1,0 +1,467 @@
+// Dashboard widget styles. Nothing else belongs in this file.
+// Every class starts with .aql-widget-. See References/DASHBOARD_WIDGET_CONTRACT.md.
+
+:root {
+  --aql-widget-track        : #{$border};
+  --aql-widget-track-strong : #{$border-strong};
+  --aql-widget-ink          : #{$ink};
+  --aql-widget-ink-2        : #{$ink-2};
+  --aql-widget-muted        : #{$ink-muted};
+  --aql-widget-faint        : #{$ink-4};
+  --aql-widget-on-fill     : #FFFFFF;
+  --aql-widget-surface     : #{$surface};
+}
+
+.aql-widget {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.aql-widget__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.aql-widget__mono {
+  font-family: $font-mono;
+}
+
+.aql-widget-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 6px;
+  color: var(--aql-widget-faint);
+  text-align: center;
+}
+
+.aql-widget-empty__text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.aql-widget-gauge,
+.aql-widget-progress {
+  position: relative;
+  align-items: center;
+  justify-content: center;
+}
+
+.aql-widget__track {
+  fill: none;
+  stroke: var(--aql-widget-track);
+}
+
+.aql-widget__track-bg {
+  fill: var(--aql-widget-track);
+}
+
+.aql-widget__value-text {
+  fill: var(--aql-widget-ink);
+  font-weight: 700;
+  font-family: $font-mono;
+}
+
+.aql-widget__sub-text {
+  fill: var(--aql-widget-muted);
+}
+
+.aql-widget__faint-text {
+  fill: var(--aql-widget-faint);
+  font-family: $font-mono;
+}
+
+.aql-widget__highlight-text {
+  font-weight: 700;
+  font-family: $font-mono;
+}
+
+.aql-widget__needle-pivot {
+  fill: var(--q-primary);
+}
+
+.aql-widget-bullet,
+.aql-widget-waffle,
+.aql-widget-bar,
+.aql-widget-proportion,
+.aql-widget-donut,
+.aql-widget-radial {
+  position: relative;
+  align-items: center;
+  justify-content: center;
+}
+
+.aql-widget-metric {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.aql-widget-metric__content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+}
+
+.aql-widget-metric__value {
+  font-family: $font-mono;
+  font-weight: 700;
+  color: var(--aql-widget-ink);
+  line-height: 1.15;
+}
+
+.aql-widget-metric__footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.aql-widget-metric__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: $font-mono;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.aql-widget-metric__badge-icon {
+  width: 9px;
+  height: 9px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.aql-widget-metric__caption {
+  font-size: 11.5px;
+  color: var(--aql-widget-muted);
+}
+
+.aql-widget__bullet-target {
+  stroke: var(--aql-widget-ink);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.aql-widget__waffle-cell--off {
+  fill: var(--aql-widget-track);
+}
+
+.aql-widget__axis-line {
+  stroke: var(--aql-widget-track-strong);
+  stroke-width: 1;
+}
+
+.aql-widget__grid-line {
+  stroke: var(--aql-widget-track);
+  stroke-width: 1;
+}
+
+.aql-widget__zero-line {
+  stroke: var(--aql-widget-track-strong);
+  stroke-width: 1.5;
+}
+
+.aql-widget__leader-line {
+  stroke: var(--aql-widget-track-strong);
+  stroke-width: 1;
+  fill: none;
+}
+
+.aql-widget-funnel,
+.aql-widget-ageing,
+.aql-widget-heat-grid {
+  position: relative;
+  align-items: center;
+  justify-content: center;
+}
+
+.aql-widget-ranked-list {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.aql-widget-ranked-list__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.aql-widget-ranked-list__row--tight {
+  min-height: 32px;
+  padding: 3px 0;
+}
+
+.aql-widget-ranked-list__row--cozy {
+  min-height: 44px;
+  padding: 6px 0;
+}
+
+.aql-widget-ranked-list__bar {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 4px;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.aql-widget-ranked-list__bar--capsule {
+  top: 20%;
+  bottom: 20%;
+  border-radius: 9999px;
+}
+
+.aql-widget-ranked-list__content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  z-index: 1;
+}
+
+.aql-widget-ranked-list__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: $font-mono;
+  flex-shrink: 0;
+  margin-right: 8px;
+  background-color: color-mix(in srgb, var(--q-primary) 12%, transparent);
+  color: var(--q-primary);
+}
+
+.aql-widget-ranked-list__name-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.aql-widget-ranked-list__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--aql-widget-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aql-widget-ranked-list__caption {
+  font-size: 11px;
+  color: var(--aql-widget-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.aql-widget-ranked-list__value {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: $font-mono;
+  color: var(--aql-widget-ink);
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.aql-widget-timeline {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.aql-widget-timeline--vertical {
+  justify-content: space-between;
+}
+
+.aql-widget-timeline__item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+}
+
+.aql-widget-timeline__marker-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 18px;
+  flex-shrink: 0;
+  margin-right: 10px;
+  height: 100%;
+}
+
+.aql-widget-timeline__marker-wrap {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.aql-widget-timeline__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #FFFFFF;
+}
+
+.aql-widget-timeline__connector {
+  position: absolute;
+  top: 14px;
+  bottom: -4px;
+  left: 8px;
+  width: 2px;
+  background-color: var(--aql-widget-track-strong);
+  z-index: 1;
+}
+
+.aql-widget-timeline__content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 6px;
+}
+
+.aql-widget-timeline__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+}
+
+.aql-widget-timeline__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--aql-widget-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+
+.aql-widget-timeline__date {
+  font-size: 10.5px;
+  font-family: $font-mono;
+  color: var(--aql-widget-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.aql-widget-timeline__caption {
+  font-size: 11px;
+  color: var(--aql-widget-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Horizontal timeline */
+.aql-widget-timeline__row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+}
+
+.aql-widget-timeline__h-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.aql-widget-timeline__h-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--aql-widget-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  margin-bottom: 4px;
+}
+
+.aql-widget-timeline__h-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 4px 0;
+}
+
+.aql-widget-timeline__h-connector {
+  position: absolute;
+  left: 50%;
+  right: -50%;
+  top: calc(50% - 1px);
+  height: 2px;
+  background-color: var(--aql-widget-track-strong);
+  z-index: 1;
+}
+
+.aql-widget-timeline__h-date {
+  font-size: 10px;
+  font-family: $font-mono;
+  color: var(--aql-widget-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  margin-top: 4px;
+}
+
+
+
+
